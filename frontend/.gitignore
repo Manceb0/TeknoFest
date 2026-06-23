@@ -1,0 +1,9 @@
+# Dependencies & build
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Local env overrides
+.env.local
+.env.*.local

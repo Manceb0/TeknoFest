@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+*.egg-info/
+
+# Local data
+quismotion.db
+*.duckdb
+*.duckdb.wal
+*.db-journal
+evidence/
+
+# Model weights (download locally; keep out of git)
+*.pt
+*.onnx
