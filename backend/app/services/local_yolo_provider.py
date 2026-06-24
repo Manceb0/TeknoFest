@@ -235,12 +235,14 @@ class LocalYOLOProvider(AIProvider):
                 "label": behavior_label,
                 "confidence": round(float(behavior_conf), 3),
                 "evidence": behavior_evidence,
+                "bbox": state.behavior_bbox if behavior_label in ("phone_detected", "smoking_detected") else None,
             },
             "occupants": {
                 "count": occupants,
                 "driver": 1 if occupants >= 1 else 0,
                 "passengers": max(0, occupants - 1),
                 "confidence": round(float(occ_conf), 3),
+                "boxes": state.occupant_boxes,
             },
             "speed": {
                 "posted_limit": posted_limit,
@@ -280,25 +282,27 @@ class LocalYOLOProvider(AIProvider):
         """
         if state.last_occupant_frame != 0 and state.frame_id - state.last_occupant_frame < 6:
             return state.occupant_count, state.occupant_confidence
-        x1, y1, x2, y2 = vehicle_box
-        crop = frame[max(0, y1):y2, max(0, x1):x2]
+        ox, oy = max(0, vehicle_box[0]), max(0, vehicle_box[1])
+        crop = frame[oy:vehicle_box[3], ox:vehicle_box[2]]
         if crop.size == 0:
             return state.occupant_count, state.occupant_confidence
         state.last_occupant_frame = state.frame_id
-        w = crop.shape[1]
-        scale = max(1.0, 480.0 / max(w, 1))
+        scale = max(1.0, 480.0 / max(crop.shape[1], 1))
         if scale > 1.0:
             crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         res = self.model.predict(crop, imgsz=640, conf=0.40, classes=[0],
                                  device=self.device, verbose=False)[0]
         ch, cw = crop.shape[:2]
-        confs = []
+        confs, boxes = [], []
         for box in res.boxes:
             bx1, by1, bx2, by2 = box.xyxy[0].tolist()
             if ((bx2 - bx1) * (by2 - by1)) / (cw * ch) >= 0.02:  # drop tiny noise
                 confs.append(float(box.conf))
+                boxes.append({"x": int(ox + bx1 / scale), "y": int(oy + by1 / scale),
+                              "w": int((bx2 - bx1) / scale), "h": int((by2 - by1) / scale)})
         state.occupant_count = len(confs)
         state.occupant_confidence = max(confs) if confs else 0.0
+        state.occupant_boxes = boxes
         return state.occupant_count, state.occupant_confidence
 
     # ------------------------------------------------------------------ behavior
@@ -312,47 +316,57 @@ class LocalYOLOProvider(AIProvider):
                 "smoking": state.behavior_label == "smoking",
                 "phone": state.behavior_label == "phone",
             }
-        x1, y1, x2, y2 = region
-        crop = frame[max(0, y1):y2, max(0, x1):x2]
+        ox, oy = max(0, region[0]), max(0, region[1])
+        crop = frame[oy:region[3], ox:region[2]]
         if crop.size == 0:
             return result
+        # upscale the cabin crop so the seated driver is large enough to classify
+        scale = max(1.0, 480.0 / max(crop.shape[1], 1))
+        if scale > 1.0:
+            crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         state.last_behavior_frame = state.frame_id
         if self.behavior_mode == "local":
-            name, conf = self._classify_local(crop)
+            name, conf, box = self._classify_local(crop)
         else:
-            name, conf = self._classify_roboflow(crop)
+            name, conf, box = self._classify_roboflow(crop)
         if name is None:
             return result
         state.behavior_confidence = conf
+        # map the detection box (crop coords) back to frame coords for the overlay
+        if box is not None:
+            bx1, by1, bx2, by2 = box
+            state.behavior_bbox = {"x": int(ox + bx1 / scale), "y": int(oy + by1 / scale),
+                                   "w": int((bx2 - bx1) / scale), "h": int((by2 - by1) / scale)}
         if any(k in name for k in ("smok", "cigar")):
             state.behavior_label, result["smoking"] = "smoking", True
         elif "phone" in name or "cell" in name or "call" in name:
             state.behavior_label, result["phone"] = "phone", True
         else:
-            state.behavior_label = "safe"
+            state.behavior_label, state.behavior_bbox = "safe", None
         return result
 
     def _classify_local(self, crop):
-        prediction = self.behavior_model.predict(crop, imgsz=320, device=self.device, verbose=False)[0]
+        prediction = self.behavior_model.predict(crop, imgsz=512, conf=0.20, device=self.device, verbose=False)[0]
         probs = getattr(prediction, "probs", None)
-        if probs is not None:  # classification model
-            return prediction.names[int(probs.top1)].lower(), float(probs.top1conf)
+        if probs is not None:  # classification model (no box)
+            return prediction.names[int(probs.top1)].lower(), float(probs.top1conf), None
         boxes = getattr(prediction, "boxes", None)
         if boxes is not None and len(boxes):  # detection model
             best = max(boxes, key=lambda b: float(b.conf))
-            return prediction.names[int(best.cls)].lower(), float(best.conf)
-        return None, 0.0
+            return prediction.names[int(best.cls)].lower(), float(best.conf), [int(v) for v in best.xyxy[0].tolist()]
+        return None, 0.0, None
 
     def _classify_roboflow(self, crop):
         from .roboflow_service import roboflow_service
         ok, buffer = cv2.imencode(".jpg", crop)
         if not ok:
-            return None, 0.0
+            return None, 0.0, None
         try:
             response = roboflow_service.infer_sync(buffer.tobytes(), "behavior")
         except Exception:
-            return None, 0.0
-        return self._parse_roboflow_behavior(response)
+            return None, 0.0, None
+        name, conf = self._parse_roboflow_behavior(response)
+        return name, conf, None
 
     @staticmethod
     def _parse_roboflow_behavior(response):

@@ -30,10 +30,17 @@ class SessionState:
     behavior_label: str = "not_observable"
     behavior_confidence: float = 0.0
     last_behavior_frame: int = 0
+    behavior_bbox: dict | None = None
     # Occupant detection cache (driver + passengers inside the vehicle crop).
     occupant_count: int = 0
     occupant_confidence: float = 0.0
     last_occupant_frame: int = 0
+    occupant_boxes: list = field(default_factory=list)
+    # Best-evidence snapshot: keep the closest (largest vehicle area) frame on which
+    # something notable was detected, to save as the incident photo.
+    best_evidence_area: float = 0.0
+    best_evidence_jpeg: bytes | None = None
+    snapshot_incident_id: str | None = None
 
 
 class AIProvider(ABC):

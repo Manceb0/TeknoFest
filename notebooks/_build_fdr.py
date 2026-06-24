@@ -1,5 +1,6 @@
-"""Builds & executes FDR evidence notebooks 06 (Dataset) and 07 (Testing)."""
-import os, glob, nbformat as nbf
+"""Builds & executes FDR notebooks 06 (Dataset) and 07 (Testing) for the
+DELIVERED model: combined phone/cigarette/safe."""
+import os, nbformat as nbf
 from nbclient import NotebookClient
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -13,25 +14,29 @@ NB["06_dataset_preparation.ipynb"] = [
     md("""
 # 06 · Dataset Preparation  (FDR Section 2)
 
-How the behavior data was sourced, labelled, focused, balanced and split.
+How the data for the **delivered** behavior model (`phone / cigarette / safe`) was
+sourced, labelled, balanced and split.
 
-**Source.** Open-source *Distracted Driving* dataset (Roboflow Universe,
-`ipylot-project/distracted-driving-v2wk5`, v7) — 8,865 labelled images, 13
-activity classes. Per the competition rules, open-source datasets may be used for
-training/fine-tuning, reserving the competition clips for qualitative validation.
+**Sources.**
+1. **Open-source** *Distracted Driving* (Roboflow Universe,
+   `ipylot-project/distracted-driving-v2wk5`) — thousands of labelled driver images.
+   The rules allow open-source data for training/fine-tuning.
+2. **Competition footage** — frames from the 3 TEKNOFEST clips (night, surveillance
+   angle), for **domain adaptation** and for the `cigarette` class.
 
-**Focusing.** QuisMotion only needs *phone use* vs *safe*. The 13 classes diluted
-the signal (and the original split left only 3 phone boxes in test). We therefore
-**remapped** `Texting`+`Talking on the phone` → `phone`, `Safe Driving` → `safe`,
-dropped the rest, and **re-stratified** into a balanced 70/15/15 split.
+**Label mapping (to the project's 3 risk cases).**
+- `Texting` + `Talking on the phone` → **`phone`** (abundant, real)
+- competition tekno-01 driver region → **`cigarette`** (smoking; weak/clip-prior)
+- `Safe Driving` + tekno-03 → **`safe`**
+- (tekno-03 *reckless/swerving* is a **trajectory** signal, handled in nb 01/03, not a cabin class)
 """),
     code("""
 %matplotlib inline
 import glob, os
-import matplotlib.pyplot as plt
-DS = "../tmp/behavior_ds"
-NAMES = ["phone","safe"]
-counts = {s:{0:0,1:0} for s in ["train","valid","test"]}
+import numpy as np, matplotlib.pyplot as plt
+DS = "../tmp/behavior_combined"
+NAMES = ["phone","cigarette","safe"]
+counts = {s:{0:0,1:0,2:0} for s in ["train","valid","test"]}
 imgs   = {s:0 for s in ["train","valid","test"]}
 for s in counts:
     for lbl in glob.glob(f"{DS}/{s}/labels/*.txt"):
@@ -39,115 +44,115 @@ for s in counts:
         for ln in open(lbl):
             if ln.strip(): counts[s][int(ln.split()[0])]+=1
 tot = sum(imgs.values())
-print(f"{'split':7}{'images':>8}{'phone':>8}{'safe':>8}{'ratio':>8}")
+print(f"{'split':7}{'images':>8}{'phone':>8}{'ciginst':>9}{'safe':>8}{'ratio':>8}")
 for s in ["train","valid","test"]:
-    print(f"{s:7}{imgs[s]:>8}{counts[s][0]:>8}{counts[s][1]:>8}{imgs[s]/tot:>7.0%}")
+    print(f"{s:7}{imgs[s]:>8}{counts[s][0]:>8}{counts[s][1]:>9}{counts[s][2]:>8}{imgs[s]/tot:>7.0%}")
 print(f"{'TOTAL':7}{tot:>8}")
 """),
-    md("**Class distribution per split** (balanced — phone present in every split)."),
+    md("**Class distribution per split** and the 70/15/15 partition."),
     code("""
-import numpy as np
-splits=["train","valid","test"]; x=np.arange(len(splits)); w=0.35
+splits=["train","valid","test"]; x=np.arange(len(splits)); w=0.26
 fig,ax=plt.subplots(1,2,figsize=(13,4))
-ax[0].bar(x-w/2,[counts[s][0] for s in splits],w,label="phone")
-ax[0].bar(x+w/2,[counts[s][1] for s in splits],w,label="safe")
+for i,(cls,col) in enumerate([("phone","#4c72b0"),("cigarette","#dd8452"),("safe","#55a868")]):
+    ax[0].bar(x+(i-1)*w,[counts[s][i] for s in splits],w,label=cls,color=col)
 ax[0].set_xticks(x); ax[0].set_xticklabels(splits); ax[0].set_title("Box count per class per split"); ax[0].legend(); ax[0].grid(alpha=.3,axis="y")
 ax[1].pie([imgs[s] for s in splits],labels=[f"{s}\\n{imgs[s]}" for s in splits],autopct="%1.0f%%",colors=["#4c72b0","#dd8452","#55a868"])
 ax[1].set_title("Train / Val / Test = 70 / 15 / 15")
 plt.tight_layout(); plt.show()
 """),
     md("""
-**Split justification.** 70/15/15 is a standard partition that leaves enough data
-to train while keeping statistically meaningful, **class-balanced** validation and
-test sets. Stratifying by class guarantees `phone` and `safe` both appear in every
-split (the original vendor split did not — it had only 3 phone boxes in test, which
-made the phone metric meaningless).
-"""),
-    md("**Data augmentation** (applied during training to improve robustness)."),
-    code("""
-import cv2, numpy as np
-sample = sorted(glob.glob(f"{DS}/train/images/*.jpg"))[0]
-img = cv2.cvtColor(cv2.imread(sample), cv2.COLOR_BGR2RGB)
-def hsv_v(im,f):
-    h=cv2.cvtColor(im,cv2.COLOR_RGB2HSV).astype(float); h[...,2]=np.clip(h[...,2]*f,0,255); return cv2.cvtColor(h.astype(np.uint8),cv2.COLOR_HSV2RGB)
-augs={"original":img,"darker (night sim, hsv_v 0.4)":hsv_v(img,0.4),"brighter (hsv_v 1.5)":hsv_v(img,1.5),
-      "h-flip":img[:,::-1],"blur":cv2.GaussianBlur(img,(7,7),0),"scale 0.6":cv2.resize(cv2.resize(img,None,fx=.6,fy=.6),(img.shape[1],img.shape[0]))}
-fig,ax=plt.subplots(2,3,figsize=(13,6))
-for a,(t,im) in zip(ax.ravel(),augs.items()): a.imshow(im); a.set_title(t); a.axis("off")
-plt.tight_layout(); plt.show()
-print("Training augmentation: hsv_v=0.6, hsv_s=0.5, fliplr=0.5, scale=0.5, translate=0.1, degrees=5, mosaic=1.0")
-"""),
-    md("""
-**References (datasets).**
+**Split justification.** 70/15/15 is a standard partition with statistically
+meaningful, class-balanced validation/test sets. `phone` and `safe` come from the
+diverse open-source set (well represented). `cigarette` comes **only from the
+tekno-01 competition clip** (few, weakly clip-prior labelled) — this is documented
+as a limitation (see the leakage note in notebook 07).
+
+**Augmentation** is applied on-the-fly during training and shown in detail in
+**notebook 11** (brightness/exposure, saturation, rotation, flip, scale, blur,
+noise, JPEG, mosaic, mixup) — used here to bridge the bright→night domain gap.
+
+**References.**
 - iPylot. *Distracted Driving* dataset. Roboflow Universe.
-  https://universe.roboflow.com/ipylot-project/distracted-driving-v2wk5
 - M. J. Rahman. *Driver Detection* dataset. Roboflow Universe.
-- TEKNOFEST competition footage (provided clips) — used for qualitative validation.
+- TEKNOFEST competition footage (provided clips).
 """),
 ]
 
 # --------------------------------------------------------- 07 Solution Testing
+RUN = "../backend/runs/combined_test"
 NB["07_solution_testing.ipynb"] = [
     md("""
 # 07 · Solution Testing  (FDR Section 4) — "Why do we trust our solution?"
 
-Formal evaluation of the focused **phone-vs-safe** behavior model on the
-**held-out test split** (478 images: 300 phone, 178 safe) it never saw in training.
+Formal evaluation of the **delivered** behavior model (`phone / cigarette / safe`,
+`runs/behavior_combined`) on its **held-out test split** — the model wired into the
+live backend.
 """),
-    code("""
+    code(f"""
 import json, pandas as pd
-s = json.load(open("../backend/runs/focused_test/eval_summary.json"))
-print("OVERALL (test set):")
+s = json.load(open("{RUN}/eval.json"))
+print("OVERALL (test set), device:", s.get("device","?"))
 display(pd.DataFrame([s["overall"]]))
 print("PER CLASS:")
 display(pd.DataFrame(s["per_class"]))
-print("Inference speed:", s["fps_gpu_512"], "FPS  (RTX 4060, 512px)")
+print("Inference speed:", s["fps_gpu_512"], "FPS (512px)")
 """),
     md("### Confusion matrix (test set)"),
-    code("""
+    code(f"""
 %matplotlib inline
 import matplotlib.pyplot as plt, matplotlib.image as mpimg
 fig,ax=plt.subplots(1,2,figsize=(13,5))
-for a,p,t in [(ax[0],"../backend/runs/focused_test/confusion_matrix.png","Confusion matrix (counts)"),
-              (ax[1],"../backend/runs/focused_test/confusion_matrix_normalized.png","Normalized")]:
+for a,p,t in [(ax[0],"{RUN}/confusion_matrix.png","Confusion matrix (counts)"),
+              (ax[1],"{RUN}/confusion_matrix_normalized.png","Normalized")]:
     a.imshow(mpimg.imread(p)); a.set_title(t); a.axis("off")
 plt.tight_layout(); plt.show()
+"""),
+    md("""
+**What this shows.** Predicted (rows) vs true (columns) for `phone / cigarette /
+safe` on the held-out test set. The diagonal = correct predictions; off-diagonal =
+confusions. `phone` and `safe` are clean; `cigarette` also scores high **but see the
+honesty note below** — its test frames come from the same clip as its training
+frames, so that number is optimistic.
 """),
     md("### Precision-Recall and F1 curves (test set)"),
-    code("""
+    code(f"""
 fig,ax=plt.subplots(1,2,figsize=(13,5))
-for a,p,t in [(ax[0],"../backend/runs/focused_test/BoxPR_curve.png","Precision-Recall curve"),
-              (ax[1],"../backend/runs/focused_test/BoxF1_curve.png","F1-confidence curve")]:
+for a,p,t in [(ax[0],"{RUN}/BoxPR_curve.png","Precision-Recall curve"),
+              (ax[1],"{RUN}/BoxF1_curve.png","F1-confidence curve")]:
     a.imshow(mpimg.imread(p)); a.set_title(t); a.axis("off")
 plt.tight_layout(); plt.show()
 """),
-    md("### Inference speed (FPS) across configs"),
-    code("""
-import pandas as pd
+    md("""
+**What this shows.** Area under PR = Average Precision per class; the F1-confidence
+curve gives the best operating threshold. High and stable for `phone`/`safe`.
+"""),
+    md("### Inference speed (FPS)"),
+    code(f"""
+import pandas as pd, json
+s = json.load(open("{RUN}/eval.json"))
 fps = pd.DataFrame([
-    {"model":"YOLOv8x detector","device":"GPU (RTX 4060)","ms/frame":24,"FPS":40},
-    {"model":"YOLOv8s detector","device":"GPU","ms/frame":18,"FPS":55},
-    {"model":"YOLOv8s detector","device":"CPU","ms/frame":101,"FPS":10},
-    {"model":"Behavior (phone/safe)","device":"GPU","ms/frame":round(1000/s["fps_gpu_512"],1),"FPS":s["fps_gpu_512"]},
+    {{"model":"YOLOv8x detector","device":"GPU (RTX 4060)","ms/frame":24,"FPS":40}},
+    {{"model":"YOLOv8s detector","device":"CPU","ms/frame":101,"FPS":10}},
+    {{"model":"Behavior phone/cigarette/safe","device":s.get("device","?"),"ms/frame":round(1000/max(s["fps_gpu_512"],1),1),"FPS":s["fps_gpu_512"]}},
 ])
 display(fps)
 """),
     md("""
-### Why we trust our solution
-- On the **held-out test split** the behavior model reaches **F1 = 1.00**,
-  **mAP@50 = 0.995**, **mAP@50-95 = 0.86** with **phone and safe both at P/R ≈ 1.0**
-  — measured on data excluded from training, with phone well represented (300 imgs).
-- The confusion matrix shows **near-zero cross-class confusion**.
-- It runs at **~26 FPS** on the RTX 4060 (real-time over a 10 FPS stream).
-- Vehicle detection is validated separately (`tests/test_real_videos.py`): consistent
-  detections on all three competition clips with confidence ≥ 0.9 and growing bbox area.
+### Why we trust our solution — and where we don't (honest)
 
-**Honest scope.** These metrics are on the open-source dataset's domain (bright,
-front-cabin). On the night/side-angle competition footage the model needs
-fine-tuning on annotated competition frames (project `quismotion-driver-behavior`,
-script `finetune_behavior.py`) — see notebook 03. License-plate OCR is bounded by
-the 464p clip resolution (notebook 02). The pipeline, metrics and FPS above
-constitute the data-driven evidence that the AI solution works.
+- **`phone` and `safe` are trustworthy.** They are backed by thousands of diverse
+  open-source images; their test metrics measure real generalization.
+- **Vehicle detection** is validated separately (`tests/test_real_videos.py`):
+  consistent detection on all three clips, confidence ≥ 0.9, growing bbox area.
+- **Real-time:** the detector runs ~24 ms/frame on the RTX 4060 (≈40 FPS).
+
+> **⚠️ Honesty note — `cigarette` metric is optimistic (data leakage).** The
+> `cigarette` class is built **only from the tekno-01 clip**, and its train and
+> test frames come from that same short video (near-duplicate frames). So a high
+> `cigarette` score means the model **memorised that clip**, not that it detects
+> smoking in general. To claim generalisable smoking detection we need diverse
+> footage (multiple drivers, day/night). On the live page it correctly flags
+> smoking on tekno-01; treat that as a per-clip demo, not a general guarantee.
 """),
 ]
 

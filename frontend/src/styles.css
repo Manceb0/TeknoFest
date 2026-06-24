@@ -109,6 +109,10 @@ input { width: 100%; height: 50px; color: var(--ink); background: var(--surface)
 .detection-box > span { position: absolute; top: -24px; left: -2px; padding: .24rem .45rem; background: var(--telemetry); color: oklch(0.13 0.025 205); font: 600 .65rem 'IBM Plex Mono'; white-space: nowrap; }
 .plate-detection-box { position: absolute; border: 2px solid var(--qod); pointer-events: none; }
 .plate-detection-box span { position: absolute; bottom: -23px; left: -2px; padding: .2rem .38rem; background: var(--qod); color: oklch(0.13 0.03 72); font: 600 .62rem 'IBM Plex Mono'; white-space: nowrap; }
+.occupant-box { position: absolute; border: 2px solid oklch(0.78 0.17 145); pointer-events: none; transition: all 100ms linear; }
+.occupant-box > span { position: absolute; top: -22px; left: -2px; padding: .2rem .4rem; background: oklch(0.78 0.17 145); color: oklch(0.15 0.03 145); font: 600 .6rem 'IBM Plex Mono'; white-space: nowrap; }
+.behavior-box { position: absolute; border: 2px solid oklch(0.66 0.23 18); pointer-events: none; transition: all 100ms linear; box-shadow: 0 0 12px oklch(0.66 0.23 18 / 0.5); }
+.behavior-box > span { position: absolute; bottom: -22px; right: -2px; padding: .2rem .4rem; background: oklch(0.66 0.23 18); color: oklch(0.99 0 0); font: 700 .62rem 'IBM Plex Mono'; white-space: nowrap; }
 .session-controls { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .8rem 0; }
 .control-buttons, .technical-strip { display: flex; align-items: center; gap: .5rem; }
 .event-btn { color: var(--qod); }
@@ -166,6 +170,9 @@ input { width: 100%; height: 50px; color: var(--ink); background: var(--surface)
 .drawer-head span { color: var(--muted); font-size: .72rem; }
 .drawer-head h2 { margin: .25rem 0 1rem; font-family: 'IBM Plex Mono'; color: var(--telemetry); }
 .drawer-head button { border: 0; background: var(--raised); width: 36px; height: 36px; border-radius: 8px; cursor: pointer; }
+.evidence-photo { margin: 0 0 .9rem; }
+.evidence-photo img { width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block; }
+.evidence-photo figcaption { color: var(--muted); font-size: .68rem; margin-top: .4rem; }
 .evidence-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin-bottom: .8rem; }
 .evidence-summary div { background: var(--raised); padding: .8rem; border-radius: 8px; display: grid; gap: .3rem; }
 .evidence-summary span { color: var(--muted); font-size: .68rem; }

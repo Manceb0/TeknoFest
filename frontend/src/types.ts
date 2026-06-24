@@ -14,7 +14,8 @@ export type Detection = {
     confidence: number
   }>
   plate: { text: string; confidence: number; roi: { x: number; y: number; w: number; h: number } }
-  behavior: { label: string; confidence: number; evidence?: string }
+  behavior: { label: string; confidence: number; evidence?: string; bbox?: { x: number; y: number; w: number; h: number } | null }
+  occupants?: { count: number; driver: number; passengers: number; confidence: number; boxes?: Array<{ x: number; y: number; w: number; h: number }> }
   speed: { posted_limit: number; estimated_flag: string; confidence: number; bbox_growth_rate?: number }
   risk: { score: number; signals: Record<string, number> }
   qod: { triggered: boolean; reason?: string; state: string; quality_profile: string; bandwidth_target_mbps: number }
@@ -35,6 +36,7 @@ export type Incident = {
   qod_state: string
   latency_ms: number
   model_provider: string
+  snapshot_path?: string | null
   detection?: Detection
 }
 

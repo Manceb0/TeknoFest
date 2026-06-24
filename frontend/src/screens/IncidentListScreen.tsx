@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ChevronRight, Download, FileWarning, X } from 'lucide-react'
-import { api } from '../api'
+import { api, API_URL } from '../api'
 import type { Incident } from '../types'
 
 export function IncidentListScreen() {
@@ -39,6 +39,10 @@ export function IncidentListScreen() {
       </div>}
     {selected && <div className="detail-drawer">
       <div className="drawer-head"><div><span>Paquete de evidencia</span><h2>{selected.plate_text}</h2></div><button onClick={() => setSelected(null)} aria-label="Cerrar"><X /></button></div>
+      <figure className="evidence-photo">
+        <img src={`${API_URL}/api/incidents/${selected.incident_id}/snapshot`} alt="Evidencia capturada" onError={e => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none' }} />
+        <figcaption>Foto capturada en el momento de la detección (vehículo más cercano)</figcaption>
+      </figure>
       <div className="evidence-summary"><div><span>Riesgo</span><b>{selected.risk_score}</b></div><div><span>QoD</span><b>{selected.qod_state}</b></div><div><span>Latencia</span><b>{selected.latency_ms} ms</b></div></div>
       <pre>{JSON.stringify(selected.detection, null, 2)}</pre>
       <button className="primary-btn" onClick={exportJson}><Download size={17} /> Exportar JSON</button>

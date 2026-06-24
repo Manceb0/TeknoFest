@@ -74,7 +74,17 @@ export function VideoPanel({ videoRef, detection, running, selected, onSelected 
         top: `${detection.plate.roi.y / frameHeight * 100}%`,
         width: `${detection.plate.roi.w / frameWidth * 100}%`,
         height: `${detection.plate.roi.h / frameHeight * 100}%`,
-      }}><span>{detection.plate.text}</span></div>}
+      }}><span>PLACA · {detection.plate.text}</span></div>}
+      {running && detection?.occupants?.boxes?.map((b, i) => <div key={`occ-${i}`} className="occupant-box" style={{
+        left: `${b.x / frameWidth * 100}%`, top: `${b.y / frameHeight * 100}%`,
+        width: `${b.w / frameWidth * 100}%`, height: `${b.h / frameHeight * 100}%`,
+      }}><span>{i === 0 ? 'CONDUCTOR' : 'PASAJERO'}</span></div>)}
+      {running && detection?.behavior?.bbox && <div className="behavior-box" style={{
+        left: `${detection.behavior.bbox.x / frameWidth * 100}%`,
+        top: `${detection.behavior.bbox.y / frameHeight * 100}%`,
+        width: `${detection.behavior.bbox.w / frameWidth * 100}%`,
+        height: `${detection.behavior.bbox.h / frameHeight * 100}%`,
+      }}><span>{detection.behavior.label.replace('_detected', '').toUpperCase()} · {Math.round(detection.behavior.confidence * 100)}%</span></div>}
       <div className="video-corners" aria-hidden="true" />
       {running && <div className="live-chip"><i /> LIVE · FRAME {detection?.frame_id ?? 0}</div>}
     </div>

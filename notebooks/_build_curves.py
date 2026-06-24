@@ -24,7 +24,7 @@ overfitting test) and the detection metrics, then auto-diagnose.
     code("""
 %matplotlib inline
 import pandas as pd, matplotlib.pyplot as plt
-df = pd.read_csv("../backend/runs/behavior_focused/results.csv")
+df = pd.read_csv("../backend/runs/behavior_combined/results.csv")
 df.columns = [c.strip() for c in df.columns]
 df["train/loss"] = df["train/box_loss"]+df["train/cls_loss"]+df["train/dfl_loss"]
 df["val/loss"]   = df["val/box_loss"]+df["val/cls_loss"]+df["val/dfl_loss"]
@@ -70,15 +70,16 @@ verdict = "OVERFITTING (val loss diverging)" if overfit else "NOT overfitting (v
 print("VERDICT:", verdict)
 """),
     md("""
-**Reading these curves.**
+**Reading these curves** (delivered model: `phone / cigarette / safe`, combined
+public + competition data).
 - Train and validation loss **fall together** and validation **mAP plateaus high**
-  (~0.97–0.99) without the val loss curving back up → the model is **not
-  overfitting** on the distracted-driving dataset; it generalizes within that domain.
-- **But** good in-domain curves ≠ works on our footage. Notebook `03` shows this
-  same model predicts the wrong class on the night/surveillance clips — a **domain
-  shift**, which training curves cannot reveal (the val set is from the same
-  bright-cabin distribution as train). The fix is fine-tuning on annotated
-  competition frames (`scripts/finetune_behavior.py`), not more epochs.
+  without the val loss curving back up → **not overfitting** on the training
+  distribution.
+- **But in-domain curves ≠ real-world generalisation.** The validation set shares
+  the training distribution, so it cannot reveal the two known gaps documented
+  elsewhere: the **`cigarette` data leakage** (same tekno-01 clip in train and test,
+  notebook 07) and the **event-based behaviour** on raw clips (notebook 08). Closing
+  those is a **data** problem (diverse footage), not more epochs.
 """),
 ]
 

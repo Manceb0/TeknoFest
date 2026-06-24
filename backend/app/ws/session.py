@@ -1,4 +1,7 @@
 import asyncio
+import base64
+from pathlib import Path
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from ..core.metrics import metrics
 from ..services.ai_provider import SessionState
@@ -7,6 +10,25 @@ from ..services.local_yolo_provider import LocalYOLOProvider
 
 router = APIRouter()
 provider = LocalYOLOProvider()
+
+EVIDENCE_DIR = Path("evidence")
+EVIDENCE_DIR.mkdir(exist_ok=True)
+
+
+def _jpeg_bytes(payload: dict) -> bytes:
+    encoded = payload.get("image", "")
+    if "," in encoded:
+        encoded = encoded.split(",", 1)[1]
+    return base64.b64decode(encoded)
+
+
+def _is_notable(detection: dict) -> bool:
+    """A frame worth keeping as evidence: QoD active, risky behavior, or high risk."""
+    return (
+        detection["qod"]["state"] == "active"
+        or detection["behavior"]["label"] in ("smoking_detected", "phone_detected")
+        or detection["risk"]["score"] >= 70
+    )
 
 
 @router.websocket("/ws/session/{session_id}")
@@ -34,11 +56,32 @@ async def session_socket(websocket: WebSocket, session_id: str):
         while True:
             payload = await queue.get()
             detection = await provider.process_frame(payload, state)
+
+            # Track the best evidence frame: closest vehicle (largest area) among
+            # notable frames, so the saved photo is the clearest moment.
+            area = detection["detections"][0]["bbox_area_ratio"] if detection["detections"] else 0.0
+            if _is_notable(detection) and area > state.best_evidence_area:
+                state.best_evidence_area = area
+                state.best_evidence_jpeg = _jpeg_bytes(payload)
+                # if an incident snapshot already exists, upgrade it to this closer frame
+                if state.snapshot_incident_id:
+                    (EVIDENCE_DIR / f"{state.snapshot_incident_id}.jpg").write_bytes(state.best_evidence_jpeg)
+
             should_store = detection["qod"]["triggered"] or detection["risk"]["score"] >= 70
             if should_store and (not state.incident_recorded or detection["qod"]["triggered"]):
                 embedding = await asyncio.to_thread(provider.embed_from_payload, payload)
-                detection["incident_id"] = incident_store.save(detection, embedding)
+                snapshot_jpeg = state.best_evidence_jpeg or _jpeg_bytes(payload)
+                incident_id = incident_store.save(detection, embedding, snapshot_path="pending")
+                (EVIDENCE_DIR / f"{incident_id}.jpg").write_bytes(snapshot_jpeg)
+                # persist the real relative path now that we know the id
+                from ..db import db
+                with db.lock:
+                    db.conn.execute("UPDATE incidents SET snapshot_path=? WHERE incident_id=?",
+                                    [f"evidence/{incident_id}.jpg", incident_id])
+                detection["incident_id"] = incident_id
+                state.snapshot_incident_id = incident_id
                 state.incident_recorded = True
+
             await websocket.send_json(detection)
             queue.task_done()
 
