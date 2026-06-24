@@ -124,7 +124,35 @@ riesgo y QoD (servida en `GET /api/incidents/{id}/snapshot`). Pestañas
 
 **Límites reales (documentados, no ocultos):**
 - **Matrícula**: capada por 464p → necesita footage 1080p (lo que captura el QoD).
+  Probado: ni YOLO-World ni SAM la localizan a esa resolución (notebook 02).
 - **Fumar**: funciona sobre el clip de demo pero **no generaliza** sin footage
   diverso (fuga de datos en la métrica del cigarrillo).
 - **Conducción imprudente (tekno-03)**: vía trayectoria; mejora con más clips.
 - **SAM 3 / YOLO-World**: herramientas de auto-etiquetado off-line, no para el vivo.
+
+## 8. Conceptos clave y referencias (para entender el proyecto)
+
+Glosario corto de todo lo que se usa, para que cualquiera del equipo entienda el
+README sin investigar por su cuenta:
+
+| Término | Qué es / por qué se usa aquí | Referencia |
+|---|---|---|
+| **YOLOv8** (n/s/x) | Red que **detecta objetos** (vehículo, persona) en una imagen; x = más precisa, n = más rápida. | https://docs.ultralytics.com |
+| **DeepSORT** | **Seguimiento**: le da un ID estable al vehículo entre frames (para medir trayectoria/zigzag). | https://github.com/levan92/deep_sort_realtime |
+| **EasyOCR** | **Lee texto** de imágenes (matrícula, cartel de velocidad). | https://github.com/JaidedAI/EasyOCR |
+| **YOLO-World** | Detección **open-vocabulary**: detecta por *texto* ("cigarette") sin entrenar. La usamos como auto-etiquetador. | https://docs.ultralytics.com/models/yolo-world |
+| **SAM 2 / SAM 3** | **Segment Anything**: genera *máscaras* de píxeles; SAM 3 segmenta por concepto de texto. Herramienta de etiquetado. | https://docs.ultralytics.com/models/sam-3 |
+| **QoD** (Quality on Demand) | API 5G de Turkcell que **sube el ancho de banda** bajo demanda; aquí la dispara la IA al acercarse el vehículo. | API Turkcell (Etapa posterior) |
+| **DuckDB + VSS** | Base de datos analítica + extensión de **búsqueda vectorial** (incidentes similares por embedding). | https://duckdb.org/docs/extensions/vss |
+| **Embedding** | Vector numérico (512-d) que resume una imagen; permite comparar/buscar por similitud. | — |
+| **mAP / Precision / Recall / F1** | Métricas de calidad de un detector. **Precision**=de lo detectado, cuánto es correcto; **Recall**=de lo real, cuánto detecta; **F1**=balance; **mAP**=precisión media. | https://docs.ultralytics.com/guides/yolo-performance-metrics |
+| **Fuga de datos** (data leakage) | Cuando train y test comparten datos casi idénticos → la métrica sale alta pero **engaña** (memoriza, no generaliza). Pasa con `cigarette` (1 solo clip). | — |
+| **Brecha de dominio** (domain gap) | Un modelo entrenado en un dominio (cabina diurna) **falla** en otro (vigilancia nocturna). Por eso hay que adaptar/anotar el dominio real. | — |
+| **Augmentación** | Variar artificialmente las imágenes de entrenamiento (brillo, blur, ruido…) para que el modelo **generalice**. Ver notebook 11. | https://docs.ultralytics.com/usage/cfg/#augmentation-settings |
+| **Fine-tuning** | Re-entrenar un modelo preexistente sobre tus datos para adaptarlo a tu problema. | — |
+| **ONNX / FP16 / INT8** | Formato portable + cuantización para correr el modelo **más rápido/ligero**. | https://onnx.ai |
+
+> **Cómo leer los hallazgos del proyecto.** Muchos "límites" (placa, fumar) **no
+> son fallos de programación**: son límites de **datos** (pocos/no diversos) o de
+> **resolución** (464p). Cada uno está demostrado con su notebook. La forma de
+> cerrarlos es conseguir **mejor footage** (1080p, diverso), no más código.

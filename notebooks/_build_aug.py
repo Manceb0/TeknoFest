@@ -41,7 +41,7 @@ def jpeg(im, q):
     return cv2.cvtColor(cv2.imdecode(buf, 1), cv2.COLOR_BGR2RGB)
 bw, bh = x2-x1, y2-y1
 cabin = cv2.resize(img[y1:y1+int(bh*0.55), x1:x2], None, fx=3, fy=3)          # upper vehicle = cabin
-plate_roi = img[y1+int(bh*0.78):y2, x1+int(bw*0.18):x1+int(bw*0.82)]          # lower-center = plate
+plate_roi = img[y1+int(bh*0.80):y1+int(bh*0.92), x1+int(bw*0.24):x1+int(bw*0.60)]  # tight geometric ROI on the front plate
 plate_big = cv2.resize(plate_roi, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
 g = cv2.cvtColor(plate_big, cv2.COLOR_RGB2GRAY); cl = cv2.createCLAHE(3,(8,8)).apply(g)
 steps = {
@@ -92,8 +92,11 @@ plt.tight_layout(); plt.show()
 ## Conclusion
 
 - **Preprocessing is geometry-correct now:** the cabin crop (from the detected
-  vehicle box) frames the **driver** and the plate ROI lands on the **plate** — these
-  are the exact inputs fed to the behavior model and to EasyOCR.
+  vehicle box) frames the **driver** and the plate ROI is a **tight geometric crop**
+  on the front plate — these feed the behavior model and EasyOCR.
+- **Plate localisation is geometric, not learned, on purpose:** at 464p a learned
+  plate detector/segmenter (YOLO-World, SAM 2) fails (see **notebook 02**), so we
+  use a geometric ROI here; a real plate detector becomes viable at 1080p.
 - **Augmentation covers the real failure modes** of night surveillance video:
   low light (brightness/exposure), motion blur, sensor noise, stream compression
   (JPEG) and viewpoint changes (rotation/scale/translate/flip).

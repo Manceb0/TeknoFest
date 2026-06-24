@@ -118,8 +118,15 @@ served at `GET /api/incidents/{id}/snapshot` and shown in the app's *Incidentes*
 screen. Below we reproduce that selection on each clip.
 """),
     code("""
-def best_evidence(video, step=3):
-    cap=cv2.VideoCapture(video); best=None; idx=0
+# Each clip = ONE risk case, visualised by its REAL signal:
+#   FUMAR / LLAMADA -> zoomed cabin crop with the detected behavior box
+#   ZIGZAG          -> the vehicle's trajectory (centre path) drawn as a line
+CASE = {"tekno-01": ("FUMAR","cigarette",(255,60,60)),
+        "tekno-02": ("LLAMADA","phone",(60,160,255)),
+        "tekno-03": ("IMPRUDENTE / ZIGZAG", None, (245,210,40))}
+
+def analyze(video, expected, step=3):
+    cap=cv2.VideoCapture(video); centers=[]; big_area=None; behav=None; idx=0
     while True:
         ok,fr=cap.read()
         if not ok: break
@@ -128,21 +135,39 @@ def best_evidence(video, step=3):
             if len(r.boxes):
                 b=max(r.boxes,key=lambda b:(b.xyxy[0][2]-b.xyxy[0][0])*(b.xyxy[0][3]-b.xyxy[0][1]))
                 x1,y1,x2,y2=[int(v) for v in b.xyxy[0].tolist()]; H,W=fr.shape[:2]
-                area=((x2-x1)*(y2-y1))/(W*H)
-                crop=cv2.resize(fr[max(0,y1):y2,max(0,x1):x2],None,fx=3,fy=3)
-                rr=beh.predict(crop,imgsz=512,conf=0.20,device=DEV,verbose=False)[0]
-                lab=beh.names[int(max(rr.boxes,key=lambda b:float(b.conf)).cls)] if len(rr.boxes) else "none"
-                notable = lab in ("phone","cigarette") or area>0.15
-                if notable and (best is None or area>best[0]): best=(area,fr.copy(),lab)
+                centers.append(((x1+x2)//2,(y1+y2)//2)); area=((x2-x1)*(y2-y1))/(W*H)
+                if big_area is None or area>big_area[0]: big_area=(area,fr.copy(),(x1,y1,x2,y2))
+                if expected:  # track the clearest behavior detection (max conf of the expected concept)
+                    cab=cv2.resize(fr[y1:y1+int((y2-y1)*0.55),x1:x2],None,fx=4,fy=4)
+                    rr=beh.predict(cab,imgsz=512,conf=0.12,device=DEV,verbose=False)[0]
+                    for bx in rr.boxes:
+                        if beh.names[int(bx.cls)]==expected:
+                            cf=float(bx.conf)
+                            if behav is None or cf>behav[0]:
+                                behav=(cf,cab.copy(),[int(z) for z in bx.xyxy[0].tolist()])
         idx+=1
-    cap.release(); return best
-fig,axes=plt.subplots(1,3,figsize=(16,4))
+    cap.release(); return centers, big_area, behav
+
+fig,axes=plt.subplots(1,3,figsize=(16,4.4))
 for a,v in zip(axes,sorted(glob.glob("../frontend/public/demo-videos/*.mp4"))):
     name=v.split('/')[-1].split(chr(92))[-1].replace('.mp4','')
-    be=best_evidence(v)
-    if be: a.imshow(cv2.cvtColor(be[1],cv2.COLOR_BGR2RGB)); a.set_title(f"{name} · evidencia (area={be[0]:.0%}, {be[2]})",fontsize=9)
+    case,expected,col=CASE[name]; centers,big_area,behav=analyze(v,expected)
+    if name=="tekno-03":
+        # draw the trajectory: lateral oscillation = zigzag
+        disp=cv2.cvtColor(big_area[1],cv2.COLOR_BGR2RGB)
+        for p,q in zip(centers,centers[1:]): cv2.line(disp,p,q,(245,210,40),3)
+        for p in centers: cv2.circle(disp,p,5,(255,255,255),-1)
+        xs=[c[0] for c in centers]; chg=sum(1 for a0,b0,c0 in zip(xs,xs[1:],xs[2:]) if (b0-a0)*(c0-b0)<0)
+        a.imshow(disp); a.set_title(f"{name} · {case} — trazado ({chg} cambios de dirección)",fontsize=9)
+    elif behav:
+        disp=cv2.cvtColor(behav[1],cv2.COLOR_BGR2RGB); bb=behav[2]
+        cv2.rectangle(disp,(bb[0],bb[1]),(bb[2],bb[3]),col,3)
+        a.imshow(disp); a.set_title(f"{name} · {case} — recorte de cabina (conf {behav[0]:.2f})",fontsize=9)
+    else:
+        a.imshow(cv2.cvtColor(big_area[1],cv2.COLOR_BGR2RGB)); a.set_title(f"{name} · {case} (no detectado en este clip)",fontsize=9)
     a.axis("off")
 plt.tight_layout(); plt.show()
+print("Each clip maps to ONE risk case. tekno-03's risk is the trajectory (zigzag), not a cabin object — so it shows the swerving score, not a cabin label.")
 """),
     md("""
 ## Conclusions (honest, field-observed)

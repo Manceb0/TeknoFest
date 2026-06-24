@@ -194,12 +194,53 @@ else:
         print(f"  {tag:16}-> detections: {j.get('predictions', [])}")
     print("=> a dedicated, well-trained plate detector also finds nothing: the signal is gone.")
 """),
+    md("**Can a modern detector/segmenter *find* the plate? (YOLO-World + SAM 2)**"),
+    code("""
+from ultralytics import YOLOWorld, SAM
+world = YOLOWorld("../backend/yolov8x-worldv2.pt"); world.set_classes(["license plate"])
+sam = SAM("../backend/sam2_b.pt")
+img2 = cv2.imread("../tmp/dataset_frames/tekno-01_0150.jpg")
+rv = model.predict(img2, imgsz=512, conf=0.25, classes=[2,3,5,7], device=DEV, verbose=False)[0]
+bb = max(rv.boxes, key=lambda b:(b.xyxy[0][2]-b.xyxy[0][0])*(b.xyxy[0][3]-b.xyxy[0][1]))
+vx1,vy1,vx2,vy2 = [int(v) for v in bb.xyxy[0].tolist()]
+crop = cv2.resize(img2[vy1:vy2, vx1:vx2], None, fx=4, fy=4); ch,cw = crop.shape[:2]
+rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+# (a) YOLO-World open-vocabulary detection of "license plate"
+w = world.predict(crop, imgsz=640, conf=0.01, device=DEV, verbose=False)[0]
+yw = rgb.copy(); cover=0
+if len(w.boxes):
+    d = max(w.boxes, key=lambda b:float(b.conf)); bx=[int(v) for v in d.xyxy[0].tolist()]
+    cover=(bx[2]-bx[0])*(bx[3]-bx[1])/(cw*ch)
+    cv2.rectangle(yw,(bx[0],bx[1]),(bx[2],bx[3]),(255,0,0),4)
+    print(f"YOLO-World 'license plate': conf={float(d.conf):.3f}, box covers {cover:.0%} of the crop (a plate is a few %)")
+# (b) SAM 2 only segments where WE point it (a geometric prior, not detection)
+px,py = cw//3, int(ch*0.9)
+sp = sam(crop, points=[[px,py]], labels=[1], device=DEV, verbose=False)[0]
+sm = rgb.copy(); mcov=0
+if getattr(sp,'masks',None) is not None:
+    mk=sp.masks.data.cpu().numpy()[0].astype(bool); mcov=mk.mean()
+    sm[mk]=(0.5*sm[mk]+0.5*np.array([255,80,80])).astype(np.uint8); cv2.circle(sm,(px,py),10,(0,255,0),-1)
+    print(f"SAM2 (we point at the plate): mask covers {mcov:.1%} of the crop")
+fig,ax=plt.subplots(1,2,figsize=(13,4))
+ax[0].imshow(yw); ax[0].set_title(f"YOLO-World 'license plate' -> {cover:.0%} box (cannot localise)"); ax[0].axis("off")
+ax[1].imshow(sm); ax[1].set_title(f"SAM2 at a GIVEN point -> {mcov:.1%} mask (needs the prior)"); ax[1].axis("off")
+plt.tight_layout(); plt.show()
+"""),
     md("""
-**Conclusion.** The plate is **resolution-limited**, not model-limited. Upscaling
-is interpolation — it cannot add detail. This is exactly why the PDR designs the
-**QoD 480p→1080p** boost: to capture a sharp plate frame. With 1080p competition
-footage (or the real cameras) the existing EasyOCR reader will work; on these
-464p clips it can only produce a best-effort guess.
+**Conclusion (data-driven).** The plate is **resolution-limited**, and no tool
+*finds* it by itself at 464p:
+- **YOLO-World** ("license plate", open-vocabulary) returns a **near-whole-image
+  box at ~2% confidence** — it cannot localise the plate.
+- **SAM 2** can only segment a plate-sized region when **we hand it the plate
+  location** (a point/box). That is the *same geometric prior* we already use — SAM
+  adds a tidy mask but **no detection**: it doesn't know where the plate is.
+- A fixed-fraction ROI works similarly (geometric prior) and is what the pipeline uses.
+
+So localisation stays **geometric**, and even with a perfect crop the **OCR is
+capped by resolution** (the plate is ~30 px, almost no contrast). This is exactly
+why the PDR designs the **QoD 480p→1080p** boost. With 1080p footage a learned
+plate detector + EasyOCR become viable; on these 464p clips the reader can only
+produce a best-effort guess.
 """),
 ]
 
