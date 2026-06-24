@@ -1,0 +1,83 @@
+{
+  "overall": {
+    "precision": 0.754,
+    "recall": 0.603,
+    "F1": 0.67,
+    "mAP50": 0.659,
+    "mAP50_95": 0.481
+  },
+  "per_class": [
+    {
+      "class": "c0 - Safe Driving",
+      "P": 0.947,
+      "R": 0.869,
+      "F1": 0.906,
+      "mAP50": 0.941
+    },
+    {
+      "class": "c1 - Texting",
+      "P": 0.0,
+      "R": 0.0,
+      "F1": 0.0,
+      "mAP50": 0.0
+    },
+    {
+      "class": "c4 - Drinking",
+      "P": 1.0,
+      "R": 0.0,
+      "F1": 0.0,
+      "mAP50": 0.0
+    },
+    {
+      "class": "c5 - Reaching Behind",
+      "P": 1.0,
+      "R": 0.0,
+      "F1": 0.0,
+      "mAP50": 0.1
+    },
+    {
+      "class": "c6 - Hair and Makeup",
+      "P": 0.21,
+      "R": 1.0,
+      "F1": 0.348,
+      "mAP50": 0.995
+    },
+    {
+      "class": "c7 - Talking to Passenger",
+      "P": 0.943,
+      "R": 0.908,
+      "F1": 0.925,
+      "mAP50": 0.976
+    },
+    {
+      "class": "d0 - Eyes Closed",
+      "P": 0.743,
+      "R": 0.63,
+      "F1": 0.682,
+      "mAP50": 0.755
+    },
+    {
+      "class": "d1 - Yawning",
+      "P": 0.773,
+      "R": 0.821,
+      "F1": 0.797,
+      "mAP50": 0.906
+    },
+    {
+      "class": "d2 - Nodding Off",
+      "P": 0.991,
+      "R": 0.943,
+      "F1": 0.966,
+      "mAP50": 0.974
+    },
+    {
+      "class": "d3 - Eyes Open",
+      "P": 0.934,
+      "R": 0.858,
+      "F1": 0.895,
+      "mAP50": 0.942
+    }
+  ],
+  "fps_gpu_512": 22.6,
+  "test_images": 1005
+}

@@ -112,6 +112,9 @@ $env:ROBOFLOW_API_KEY="<tu clave>"     # solo necesaria para refrescar las celda
 | `02_license_plate_resolution_limit` | por qué el OCR de matrícula está limitado por la fuente 464p |
 | `03_driver_behavior_and_occupants` | desajuste de dominio en conducta + detección de ocupantes funcional |
 | `04_duckdb_vss_similarity` | embeddings YOLO + búsqueda de similitud DuckDB VSS |
+| `05_behavior_training_curves` | curvas train vs val por época + diagnóstico de sobreajuste del modelo de conducta |
+| `06_dataset_preparation` | **FDR Sec. 2** — fuentes, distribución de clases, split 70/15/15 + justificación, augmentación, referencias |
+| `07_solution_testing` | **FDR Sec. 4** — Precision/Recall/F1/mAP por clase + matriz de confusión + curvas PR/F1 + FPS ("por qué confiamos") |
 
 Las celdas de Roboflow leen `ROBOFLOW_API_KEY` del entorno — la clave nunca se guarda en un notebook. Sin ella, esas celdas imprimen el resultado documentado.
 
