@@ -7,6 +7,22 @@ desktop.ini
 tmp/
 .server.pid
 *.log
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+backend/quismotion.db
+backend/evidence/
+
+# Large model/export artifacts
+notebooks/weights/
+backend/*.onnx.data
+backend/*.pt
+backend/*.onnx
+*.engine
+*.weights
 
 # Secrets
 .env

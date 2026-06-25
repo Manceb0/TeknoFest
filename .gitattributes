@@ -1,3 +1,0 @@
-notebooks/weights/clip/ViT-B-32.pt filter=lfs diff=lfs merge=lfs -text
-backend/yolov8x.onnx.data filter=lfs diff=lfs merge=lfs -text
-backend/yolov8s.onnx.data filter=lfs diff=lfs merge=lfs -text
