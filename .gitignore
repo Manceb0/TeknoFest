@@ -7,27 +7,40 @@ desktop.ini
 tmp/
 .server.pid
 *.log
-node_modules/
-dist/
-__pycache__/
-*.pyc
-.venv/
-.pytest_cache/
+backend/.server.pid
+frontend/.server.pid
 backend/quismotion.db
+backend/quismotion.duckdb
+backend/quismotion.duckdb.wal
 backend/evidence/
-
-# Large model/export artifacts
-notebooks/weights/
-backend/*.onnx.data
-backend/*.pt
-backend/*.onnx
-*.engine
-*.weights
+backend/runs/*.log
 
 # Secrets
 .env
 .env.*
 !.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+backend/.venv/
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Large local model artifacts
+notebooks/weights/
+backend/*.pt
+backend/*.onnx
+backend/*.onnx.data
+*.engine
+*.weights
 
 # IDE
 .idea/
