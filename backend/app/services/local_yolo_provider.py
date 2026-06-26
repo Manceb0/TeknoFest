@@ -29,6 +29,13 @@ class LocalYOLOProvider(AIProvider):
         # that predictor into embedding mode and corrupts later .predict() calls.
         # A dedicated instance keeps detection and embedding fully independent.
         self.embed_model = YOLO(settings.embed_model_path)
+        # fast-plate-ocr (ONNX, plate-specific, reads "34TC8532" correctly vs EasyOCR).
+        # EasyOCR kept only as fallback for speed signs.
+        try:
+            from fast_plate_ocr import LicensePlateRecognizer
+            self._plate_recognizer = LicensePlateRecognizer("global-plates-mobile-vit-v2-model")
+        except Exception:
+            self._plate_recognizer = None
         import easyocr
         self._ocr_reader = easyocr.Reader(["en"], gpu=settings.use_gpu, verbose=False)
         # Driver-behavior classifier source: local .pt > Roboflow hosted > none.
@@ -41,6 +48,11 @@ class LocalYOLOProvider(AIProvider):
             self.behavior_mode = "roboflow"
         else:
             self.behavior_mode = "none"
+        # Dedicated plate detector (Koushim/yolov8-license-plate-detection from HuggingFace).
+        # Gives a tight plate bbox → fast-plate-ocr reads the correct text.
+        self.plate_model = (
+            YOLO(settings.plate_model_path) if settings.plate_model_path else None
+        )
 
     async def process_frame(self, payload: dict, state: SessionState) -> dict:
         return await asyncio.to_thread(self._process_sync, payload, state)
@@ -452,8 +464,70 @@ class LocalYOLOProvider(AIProvider):
         lateral_range = max(xs) - min(xs)
         return min(1.0, lateral_range * 5 + direction_changes * .12)
 
+    def _ocr_crop(self, crop, x_offset, y_offset):
+        """Run CLAHE + Otsu + EasyOCR on a plate crop; return (text, conf, roi_dict)."""
+        crop = cv2.resize(crop, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        enhanced = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4)).apply(gray)
+        soft = cv2.GaussianBlur(enhanced, (0, 0), 3)
+        enhanced = cv2.addWeighted(enhanced, 2, soft, -1, 0)
+        readings = []
+        for variant in (enhanced, gray):
+            results = self._ocr_reader.readtext(variant, detail=1, paragraph=True,
+                                                allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ")
+            for result in results:
+                text = re.sub(r"\s+", " ", re.sub(r"[^A-Z0-9 ]", "", result[1].upper())).strip()
+                confidence = float(result[2]) if len(result) > 2 else .5
+                compact = text.replace(" ", "")
+                match = _PLATE_RE.fullmatch(compact)
+                if match:
+                    normalized = f"{match.group(1)} {match.group(2)} {match.group(3)}"
+                    readings.append((1 + confidence, confidence, normalized))
+                elif len(compact) >= 5:
+                    readings.append((confidence, confidence, text))
+        if readings:
+            _, confidence, text = max(readings)
+            return text, confidence, {"x": x_offset, "y": y_offset,
+                                      "w": crop.shape[1] // 4, "h": crop.shape[0] // 4}
+        return "", 0, {"x": 0, "y": 0, "w": 0, "h": 0}
+
+    def _fast_plate_ocr(self, crop, x_offset, y_offset):
+        """Use fast-plate-ocr (ONNX, plate-specific) on a BGR crop."""
+        if self._plate_recognizer is None:
+            return None
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        pred = self._plate_recognizer.run(gray)[0]
+        text = pred.plate.strip() if hasattr(pred, "plate") else str(pred).strip()
+        text = re.sub(r"[^A-Z0-9]", "", text.upper())
+        if len(text) < 4:
+            return None
+        m = _PLATE_RE.fullmatch(text)
+        if m:
+            normalized = f"{m.group(1)} {m.group(2)} {m.group(3)}"
+            return normalized, 0.95, {"x": x_offset, "y": y_offset,
+                                      "w": crop.shape[1], "h": crop.shape[0]}
+        return text, 0.7, {"x": x_offset, "y": y_offset,
+                           "w": crop.shape[1], "h": crop.shape[0]}
+
     def _read_plate(self, frame, vehicle_box):
         x1, y1, x2, y2 = vehicle_box
+        # --- Path A: dedicated detector → fast-plate-ocr (correctly reads "34 TC 8532") ---
+        if self.plate_model is not None:
+            r = self.plate_model.predict(frame, imgsz=640, conf=0.20,
+                                         device=self.device, verbose=False)[0]
+            if r.boxes:
+                best = max(r.boxes, key=lambda b: float(b.conf))
+                px1, py1, px2, py2 = [int(v) for v in best.xyxy[0].tolist()]
+                pad = 4
+                cx1 = max(0, px1 - pad); cy1 = max(0, py1 - pad)
+                cx2 = min(frame.shape[1], px2 + pad); cy2 = min(frame.shape[0], py2 + pad)
+                crop = frame[cy1:cy2, cx1:cx2]
+                if crop.size > 0:
+                    result = self._fast_plate_ocr(crop, cx1, cy1)
+                    if result:
+                        return result
+                    return self._ocr_crop(crop, cx1, cy1)
+        # --- Path B: contour-based heuristic on lower half of vehicle box ---
         box_h = y2 - y1
         lower_y = y1 + int(box_h * .48)
         roi = frame[lower_y:y2, x1:x2]
@@ -469,29 +543,11 @@ class LocalYOLOProvider(AIProvider):
             aspect = pw / max(ph, 1)
             if 2.0 < aspect < 7.5 and pw > 35 and ph > 8 and pw * ph > 250:
                 candidates.append((pw * ph, px, py, pw, ph))
-        reader = self._ocr_reader
         for _, px, py, pw, ph in sorted(candidates, reverse=True)[:4]:
             pad = 4
-            crop = roi[max(0, py-pad):min(roi.shape[0], py+ph+pad), max(0, px-pad):min(roi.shape[1], px+pw+pad)]
-            crop = cv2.resize(crop, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
-            source_gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-            enhanced = cv2.createCLAHE(2, (8, 8)).apply(source_gray)
-            soft = cv2.GaussianBlur(enhanced, (0, 0), 3)
-            enhanced = cv2.addWeighted(enhanced, 2, soft, -1, 0)
-            readings = []
-            for variant in (enhanced, source_gray):
-                results = reader.readtext(variant, detail=1, paragraph=True, allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ")
-                for result in results:
-                    text = re.sub(r"\s+", " ", re.sub(r"[^A-Z0-9 ]", "", result[1].upper())).strip()
-                    confidence = float(result[2]) if len(result) > 2 else .5
-                    compact = text.replace(" ", "")
-                    match = _PLATE_RE.fullmatch(compact)
-                    if match:
-                        normalized = f"{match.group(1)} {match.group(2)} {match.group(3)}"
-                        readings.append((1 + confidence, confidence, normalized))
-                    elif len(compact) >= 5:
-                        readings.append((confidence, confidence, text))
-            if readings:
-                _, confidence, text = max(readings)
-                return text, confidence, {"x": x1+px, "y": lower_y+py, "w": pw, "h": ph}
+            crop = roi[max(0, py-pad):min(roi.shape[0], py+ph+pad),
+                       max(0, px-pad):min(roi.shape[1], px+pw+pad)]
+            text, conf, roi_dict = self._ocr_crop(crop, x1 + px, lower_y + py)
+            if text:
+                return text, conf, roi_dict
         return "", 0, {"x": 0, "y": 0, "w": 0, "h": 0}

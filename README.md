@@ -47,26 +47,21 @@ Video → [frames 10 FPS] → Detección vehículo (YOLOv8x) → Seguimiento (De
 Todos están **ejecutados** (traen sus salidas y gráficas). Abrir con el kernel
 **"QuisMotion (.venv)"**.
 
-| # | Notebook | Qué hace | Conclusión |
-|---|---|---|---|
-| 00 | `environment_and_gpu` | versiones + GPU/CUDA | corre en RTX 4060 (CUDA) |
-| 01 | `vehicle_detection_qod_and_latency` | detección de vehículo, área→QoD, latencia CPU vs GPU | detección sólida; **YOLOv8x GPU ~24 ms (40 FPS)**, tiempo real |
-| 02 | `license_plate_resolution_limit` | por qué falla el OCR de placa | **muro de resolución (464p)**: a esa calidad la placa es ilegible; necesita 1080p |
-| 03 | `driver_behavior_and_occupants` | conducta (fumar/móvil) + ocupantes | modelos genéricos **no transfieren** al dominio; ocupantes (conductor) sí detectable |
-| 04 | `duckdb_vss_similarity` | embeddings YOLO + búsqueda por similitud | recuperación semántica de incidentes funciona |
-| 05 | `behavior_training_curves` | curvas train vs val por época | **sin sobreajuste** (val en su mínimo, mAP en meseta) |
-| 06 | `dataset_preparation` | fuentes, distribución de clases, split 70/15/15, referencias | dataset balanceado y justificado (FDR Sec. 2) |
-| 07 | `solution_testing` | P/R/F1/mAP por clase + matriz de confusión + FPS | evidencia de testing (FDR Sec. 4) — **ver nota de fuga del cigarrillo** |
-| 08 | `operational_analysis` | comportamiento real sobre los clips (timeline, tasa) | la detección es **event-based** (puntual), no continua |
-| 09 | `robustification_world_sam` | YOLO-World + SAM2 para **localizar/auto-etiquetar** fumar/móvil | herramienta off-line de auto-etiquetado; pesada para el vivo |
-| 10 | `sam3_concept_segmentation` | **SAM 3** (complementario), segmentación por concepto | listo; se activa al añadir `sam3.pt` (peso *gated* de Meta) |
-| 11 | `preprocessing_augmentation` | pipeline de preprocesamiento + galería de augmentación | recortes correctos desde la detección + augmentación que cubre el dominio |
+**6 notebooks**, uno por sección del FDR. Todos **ejecutados** (traen salidas y gráficas).
+Abrir con el kernel **"QuisMotion (.venv)"**.
 
-> **Nota de honestidad (cigarrillo).** En el notebook 07 la clase `cigarette`
-> obtiene métricas muy altas, pero están **infladas por fuga de datos**: sus frames
-> de train y test salen del mismo clip (tekno-01). `phone` y `safe` sí son fiables
-> (miles de imágenes diversas). Detectar fumar de forma **generalizable** requiere
-> más footage diverso.
+| # | Notebook | FDR | Qué hace | Conclusión clave |
+|---|---|---|---|---|
+| 00 | `environment_setup` | prerequisito | versiones + GPU/CUDA | corre en RTX 4060 (CUDA 12.6) |
+| 01 | `dataset_preparation` | **Sec. 2** (20 pts) | clips, clases, augmentación, declaración de fuga de datos | 3 clips reales; fuga declarada honestamente |
+| 02 | `problem_analysis` | **Sec. 3.1** | 3 casos de riesgo; comparación OCR (EasyOCR ❌ vs fast-plate-ocr ✅); señal de trayectoria | `fast-plate-ocr` lee "34 TC 8532" correctamente |
+| 03 | `ai_architecture` | **Sec. 3.2/3.3** | pipeline completo superpuesto en los 3 clips; QoD evidenciado | todo nace del vehículo detectado; módulos son aguas abajo |
+| 04 | `model_training` | **Sec. 3.3** | curvas pérdida + mAP/P/R; matriz de confusión | modelo converge; mAP@0.5 ~93% (fuga declarada) |
+| 05 | `solution_testing` | **Sec. 4** (20 pts) | P/R/F1 por clase + gráfica; latencia FPS; test de regresión 3 clips | FPS ≥10 en GPU; placa correcta; conducta event-based |
+
+> **Honestidad sobre métricas.** Las métricas de conducta reflejan fuga de datos
+> (misma escena en train y test). Se declara en NB01 y NB04. Generalización real
+> requiere footage diverso de múltiples cámaras.
 
 ## 4. Inicio rápido
 

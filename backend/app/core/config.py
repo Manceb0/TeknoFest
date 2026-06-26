@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     # Dedicated .pt model for VSS frame embeddings (kept as PyTorch so embeddings
     # work even when the detector runs as ONNX).
     embed_model_path: str = "yolov8s.pt"
+    # Dedicated license-plate detector (Koushim/yolov8-license-plate-detection).
+    # When set, replaces the fixed ROI heuristic with a real YOLO-detected plate bbox,
+    # giving EasyOCR a tighter crop and better text at low resolutions.
+    plate_model_path: str | None = None
     # Driver-behavior classifier source, resolved in this order:
     #   1. behavior_model_path set        -> local YOLOv8s-cls .pt
     #   2. else Roboflow behavior project -> hosted inference (detect.roboflow.com)
