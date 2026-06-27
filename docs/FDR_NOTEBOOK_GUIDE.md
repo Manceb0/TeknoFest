@@ -26,6 +26,19 @@ Do not claim robust cigarette/smoking detection yet. Do not claim reliable exact
 
 The older notebooks are archived locally under `notebooks/_archive/` and should not be used as the main FDR evidence package.
 
+## How to read overlay boxes
+
+Use this legend when copying figures from `03_ai_architecture.ipynb`:
+
+| Color | Meaning | Strength of claim |
+|---|---|---|
+| Cyan | Vehicle detection + track ID | Strong on the supplied clips. |
+| Green | Occupant/person box in diagnostic views only | Auxiliary evidence of driver visibility, not a primary claim; omitted from the general overlay because low-light person boxes can be visually ambiguous. |
+| Red | Behavior model evidence box, only when a specialized behavior detector returns a box | Report as phone/safe evidence only when backed by the evaluated model; smoking remains experimental. |
+| Orange | Plate OCR ROI only in OCR-specific figures | Auxiliary ROI for OCR, not a general object detection claim. It is intentionally omitted from the general architecture overlay to avoid stale cached boxes. |
+
+If a plate ROI is not aligned with the current vehicle, it should not be shown in the final figure; cached OCR votes are useful for text stability but can create stale visual boxes if drawn blindly.
+
 ## Key results to cite
 
 ### Vehicle detection on provided videos

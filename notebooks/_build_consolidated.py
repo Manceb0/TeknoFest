@@ -442,21 +442,35 @@ def run_clip(path, sample_seconds=(2.0, 4.0, 6.0)):
 
 def draw_all(fr, det):
     im=cv2.cvtColor(fr, cv2.COLOR_BGR2RGB)
+    vehicle_bbox = None
+    def center_inside_vehicle(box):
+        if not vehicle_bbox or not box or box.get("w", 0) <= 0 or box.get("h", 0) <= 0:
+            return False
+        cx, cy = box["x"] + box["w"]/2, box["y"] + box["h"]/2
+        return (
+            vehicle_bbox["x"] <= cx <= vehicle_bbox["x"] + vehicle_bbox["w"]
+            and vehicle_bbox["y"] <= cy <= vehicle_bbox["y"] + vehicle_bbox["h"]
+        )
     if det["detections"]:
         d=det["detections"][0]; b=d["bbox"]
+        vehicle_bbox = b
         cv2.rectangle(im,(b["x"],b["y"]),(b["x"]+b["w"],b["y"]+b["h"]),(0,220,255),2)
         cv2.putText(im,f"CAR #{d['track_id']} {int(d['confidence']*100)}%",
                     (b["x"],max(0,b["y"]-6)),cv2.FONT_HERSHEY_SIMPLEX,0.5,(0,220,255),2)
-    for o in det["occupants"]["boxes"]:
-        cv2.rectangle(im,(o["x"],o["y"]),(o["x"]+o["w"],o["y"]+o["h"]),(60,220,120),2)
+    # Do not draw occupant boxes in the general evidence overlay: low-light person
+    # detections inside windshield crops are useful as an auxiliary signal, but
+    # the boxes can be visually ambiguous. Keep occupant count in the HUD/API.
     bb=det["behavior"]["bbox"]
-    if bb:
+    if bb and center_inside_vehicle(bb):
         cv2.rectangle(im,(bb["x"],bb["y"]),(bb["x"]+bb["w"],bb["y"]+bb["h"]),(255,60,60),2)
         label=det["behavior"]["label"].replace("_detected","").upper()
         cv2.putText(im,label,(bb["x"],bb["y"]+bb["h"]+15),cv2.FONT_HERSHEY_SIMPLEX,0.5,(255,60,60),2)
-    pr=det["plate"]["roi"]
-    if pr["w"]>0:
-        cv2.rectangle(im,(pr["x"],pr["y"]),(pr["x"]+pr["w"],pr["y"]+pr["h"]),(245,170,40),2)
+    # The general architecture figure intentionally does not draw the plate ROI:
+    # OCR votes are cached across frames, so drawing the ROI here can create stale
+    # boxes on the road. Plate localization is shown separately in NB02.
+    legend_y = im.shape[0] - 12
+    cv2.putText(im,"cyan=vehicle track  red=localized behavior evidence if present",
+                (8,legend_y),cv2.FONT_HERSHEY_SIMPLEX,0.42,(255,255,255),2)
     hud=(f"QoD:{det['qod']['state']}  risk:{det['risk']['score']}"
          f"  plate:{det['plate']['text']}  occ:{det['occupants']['count']}")
     cv2.putText(im,hud,(8,18),cv2.FONT_HERSHEY_SIMPLEX,0.5,(255,255,255),2)
@@ -477,11 +491,17 @@ plt.suptitle("Pipeline real (backend) — todas las señales superpuestas", font
 plt.tight_layout(); plt.show()
 """),
 md("""
-**Lectura.** Cada fila es un clip. Se observan todas las señales del pipeline:
-caja del vehículo + track ID (cian), ocupantes (verde), conducta (rojo) con
-etiqueta de conducta cuando hay señal, ROI de placa (naranja) y HUD con
-QoD/riesgo/matrícula. La lectura de placa se mantiene como módulo
-experimental: funciona en ROIs válidos, pero no se reclama robustez general.
+**Lectura.** Cada fila es un clip. La caja cian es la detección/track del
+vehículo; la caja roja aparece solo si el modelo especializado devuelve una
+evidencia de conducta localizada y cae dentro del vehículo actual. El overlay
+general no dibuja cajas auxiliares de ocupantes ni ROI de placa: esas señales
+pueden ser útiles en el JSON/HUD, pero visualmente se prestan a confusión en
+video nocturno. La placa se reporta en el HUD y su análisis de ROI se muestra por
+separado en el notebook de problemas/OCR.
+
+**Importante.** El informe no afirma detección robusta general de fumar: phone/safe
+es el modelo reportable en dataset separado; smoking/cigarette queda como
+prototipo de escena conocida y requiere más datos etiquetados del dominio.
 **Todo nace de la detección del vehículo** — no hay módulos sueltos.
 """),
 md("### QoD — calidad de servicio adaptativa"),

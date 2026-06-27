@@ -16,10 +16,10 @@ hay una **app web de pruebas** para ejercitar el pipeline desde el navegador.
 
 Los videos de competición definen **3 casos**, cada uno tipificado por un clip:
 
-| Clip | Caso de riesgo | Cómo se detecta |
+| Clip | Caso de riesgo esperado | Evidencia / estado actual |
 |---|---|---|
-| **tekno-01** | **Fumar** (`smoking`) | modelo de conducta en la cabina (recorte del conductor) |
-| **tekno-02** | **Llamada / móvil** (`phone`) | modelo de conducta en la cabina |
+| **tekno-01** | **Fumar** (`smoking`) | prototipo en escena conocida; no claim robusto todavía |
+| **tekno-02** | **Llamada / móvil** (`phone`) | phone/safe sí tiene modelo reportable en dataset separado; en video nocturno se reporta con caveat de dominio |
 | **tekno-03** | **Conducción imprudente / zigzag** (`swerving`) | trayectoria del vehículo (centro del bbox en el tiempo), no objeto |
 
 Además: detección de vehículo, **ocupantes** (conductor/pasajeros), **matrícula** y
