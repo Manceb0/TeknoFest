@@ -18,6 +18,14 @@ md   = lambda t: nbf.v4.new_markdown_cell(t.strip("\n"))
 code = lambda t: nbf.v4.new_code_cell(t.strip("\n"))
 META = {"kernelspec": {"name": "quismotion", "display_name": "QuisMotion (.venv)"},
         "language_info": {"name": "python"}}
+NOISY_STDERR_MARKERS = (
+    "pkg_resources is deprecated",
+    "RegisterTensorRTPluginsAsCustomOps",
+    "Failed to create CUDAExecutionProvider",
+    "onnxruntime:Default",
+    "TryGetProviderInfo_TensorRT",
+    "TryGetProviderInfo_CUDA",
+)
 
 
 # ─────────────────────────────────────────────────────────────────── NB00 ──
@@ -388,6 +396,8 @@ code("""
 %matplotlib inline
 import sys, os, cv2, base64, glob, numpy as np
 import matplotlib.pyplot as plt
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module=r"(deep_sort_realtime|clip).*")
 sys.path.insert(0, "../backend"); os.chdir("../backend")
 os.environ.setdefault("YOLO_MODEL_PATH","yolov8x.pt")
 os.environ.setdefault("EMBED_MODEL_PATH","yolov8s.pt")
@@ -453,11 +463,16 @@ def draw_all(fr, det):
     return im
 
 clips=sorted(glob.glob("../frontend/public/demo-videos/*.mp4"))
-fig,axes=plt.subplots(len(clips),3,figsize=(16,3.5*len(clips)))
+cols = 2
+fig,axes=plt.subplots(len(clips),cols,figsize=(12,3.5*len(clips)))
 for row,path in zip(np.atleast_2d(axes),clips):
     name=os.path.basename(path).replace(".mp4","")
+    shown = 0
     for ax,(_,fr,det) in zip(row, run_clip(path)):
         ax.imshow(draw_all(fr,det)); ax.set_title(name,fontsize=8); ax.axis("off")
+        shown += 1
+    for ax in row[shown:]:
+        ax.axis("off")
 plt.suptitle("Pipeline real (backend) — todas las señales superpuestas", fontsize=11)
 plt.tight_layout(); plt.show()
 """),
@@ -788,6 +803,17 @@ def build_one(name, cells):
     NotebookClient(nb, timeout=900, kernel_name="quismotion",
                    resources={"metadata": {"path": HERE}},
                    allow_errors=False).execute()
+    for cell in nb.cells:
+        if cell.get("cell_type") != "code":
+            continue
+        clean_outputs = []
+        for output in cell.get("outputs", []):
+            if output.get("output_type") == "stream":
+                text = "".join(output.get("text", []))
+                if any(marker in text for marker in NOISY_STDERR_MARKERS):
+                    continue
+            clean_outputs.append(output)
+        cell["outputs"] = clean_outputs
     with open(os.path.join(HERE, name), "w", encoding="utf-8") as fh:
         nbf.write(nb, fh)
     errors = [(o.get("ename"), str(o.get("evalue",""))[:80])
