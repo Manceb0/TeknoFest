@@ -57,6 +57,10 @@ Required caveat:
 
 > These metrics validate the focused phone-vs-safe model in the open-source dataset domain. Operational testing on TEKNOFEST-like low-light videos shows domain shift, especially for smoking/cigarette and plate OCR, therefore those labels are reported as experimental and require additional domain-specific annotation.
 
+FPS caveat:
+
+> The 26.1 FPS value is the saved benchmark for the focused behavior model at 512px. The integrated pipeline measurement in the current local notebook run falls back to CPU/ONNX Runtime and does not reach 10 FPS; real-time deployment requires CUDA/ONNX Runtime configuration, asynchronous sampling, or model optimization.
+
 ### Full/combined behavior attempts
 
 Use these results to justify narrowing the reportable claim:
@@ -112,4 +116,3 @@ Use this order in the FDR:
 4. Partially proven: operational videos show domain shift but still validate the pipeline.
 5. Experimental: plate OCR on 464p videos.
 6. Not yet robust: cigarette/smoking detection.
-

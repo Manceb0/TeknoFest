@@ -12,6 +12,7 @@ The notebook package is now aligned with the TEKNOFEST FDR structure. It is viab
 - Strong claim: phone/safe behavior model on the held-out public dataset domain.
 - Careful claim: operational validation shows domain shift on low-light TEKNOFEST-like videos.
 - Experimental claim only: cigarette/smoking detection and exact plate OCR.
+- Performance caveat: the focused behavior model has a saved 26.1 FPS benchmark, but the current integrated local pipeline run falls back to CPU/ONNX Runtime and does not yet meet 10 FPS.
 
 The notebooks should not present cigarette detection or plate OCR as solved.
 
@@ -71,4 +72,3 @@ NVIDIA TAO or DeepStream should be described only as future deployment optimizat
 ## Final reviewer note
 
 The project is not weak because it admits limitations. It becomes more credible because the report separates validated performance from experimental work. TEKNOFEST evaluators are more likely to trust a system that shows real tests, metrics and honest failure modes than one that claims perfect detection for low-resolution cigarette and plate OCR.
-

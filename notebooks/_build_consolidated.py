@@ -26,8 +26,9 @@ md("""
 # 00 · Entorno y GPU
 Confirma el entorno de ejecución del que dependen todos los demás notebooks:
 Python, PyTorch con CUDA, Ultralytics, OpenCV, DuckDB, fast-plate-ocr.
-**Conclusión adelantada:** inferencia corre en RTX 4060 (CUDA 12.6, compute 8.9),
-lo que hace que YOLOv8x sea real-time a 10 FPS.
+**Conclusión adelantada:** este notebook verifica si CUDA/GPU está disponible
+en la máquina de ejecución. El FPS reportable se mide en
+`05_solution_testing.ipynb`; no se asume tiempo real sin medición.
 """),
 code("""
 %matplotlib inline
@@ -52,9 +53,10 @@ else:
     print("No CUDA — inference on CPU")
 """),
 md("""
-**Lectura.** PyTorch con CUDA disponible confirma que el pipeline completo
-(YOLOv8x + DeepSORT + fast-plate-ocr + behavior) corre en GPU. Sin GPU el
-backend cae automáticamente a CPU manteniendo el mismo código.
+**Lectura.** Este entorno puede ejecutar el pipeline, pero la disponibilidad
+CUDA debe verificarse en cada corrida. Si CUDA aparece como `False`, el
+benchmark integrado corresponde a CPU/ONNX fallback y no debe venderse como
+rendimiento GPU.
 """),
 ]
 
@@ -93,21 +95,51 @@ for c in clips:
     print(f"  {os.path.basename(c):<20} {w}x{h}  {fps:.0f}fps  {frames} frames ({frames/fps:.1f}s)")
 """),
 code("""
-# Frames extraídos para entrenamiento
-dataset_frames = sorted(glob.glob("../tmp/dataset_frames/*.jpg"))
-behavior_frames = sorted(glob.glob("../tmp/behavior_frames/**/*.jpg", recursive=True))
-print(f"Frames para dataset general : {len(dataset_frames)}")
-print(f"Frames de conducta (labeled): {len(behavior_frames)}")
+# Conteos reales de datasets preparados
+from pathlib import Path
+import ast, pandas as pd, collections, re
 
-labels_dir = "../tmp/behavior_frames"
-class_counts = {}
-for root, _, files in os.walk(labels_dir):
-    cls = os.path.basename(root)
-    n = sum(1 for f in files if f.endswith(".jpg"))
-    if n: class_counts[cls] = n
-print("\\nDistribución de clases para entrenamiento de conducta:")
-for cls, n in sorted(class_counts.items(), key=lambda x:-x[1]):
-    print(f"  {cls:<25} {n:>4} frames")
+ROOT = Path("..")
+dataset_frames = sorted((ROOT/"tmp/dataset_frames").glob("*.jpg"))
+print(f"Frames extraídos de los clips TEKNOFEST-like: {len(dataset_frames)}")
+
+def read_names(data_yaml):
+    text = Path(data_yaml).read_text(encoding="utf-8", errors="ignore")
+    m = re.search(r"names:\\s*(\\[[^\\]]+\\])", text)
+    return ast.literal_eval(m.group(1)) if m else []
+
+def split_counts(ds_dir):
+    ds = ROOT/ds_dir
+    names = read_names(ds/"data.yaml") if (ds/"data.yaml").exists() else []
+    rows = []
+    for split in ["train", "valid", "test"]:
+        img_dir = ds/split/"images"
+        lab_dir = ds/split/"labels"
+        if not img_dir.exists():
+            continue
+        imgs = len(list(img_dir.glob("*.jpg"))) + len(list(img_dir.glob("*.png")))
+        labels = list(lab_dir.glob("*.txt")) if lab_dir.exists() else []
+        cls_counter = collections.Counter()
+        for lf in labels:
+            for line in lf.read_text(errors="ignore").splitlines():
+                parts = line.split()
+                if parts:
+                    cls_counter[int(float(parts[0]))] += 1
+        row = {"dataset": ds_dir.replace("tmp/",""), "split": split,
+               "images": imgs, "label_files": len(labels)}
+        for idx, name in enumerate(names):
+            row[f"boxes_{name}"] = cls_counter.get(idx, 0)
+        rows.append(row)
+    return rows
+
+rows = []
+for ds in ["tmp/behavior_ds", "tmp/behavior_combined"]:
+    rows.extend(split_counts(ds))
+counts = pd.DataFrame(rows)
+display(counts)
+
+print("Dataset reportable principal: behavior_ds para phone-vs-safe.")
+print("Dataset experimental: behavior_combined incluye cigarette, pero su clase es débil y con dominio limitado.")
 """),
 code("""
 # Visualizar muestra de frames de cada clase
@@ -126,9 +158,10 @@ plt.suptitle("Frames representativos — un caso de riesgo por clip", fontsize=1
 plt.tight_layout(); plt.show()
 """),
 md("""
-**Lectura.** Tres clips, tres casos de riesgo. La distribución de clases
-es deliberadamente pequeña (~20-60 instancias por clase) porque el material
-disponible es real y acotado. Eso determina la estrategia de augmentación.
+**Lectura.** El reporte debe separar dos fuentes de evidencia: (1) dataset
+phone/safe con split train/valid/test y métricas fuertes; (2) frames de los
+clips TEKNOFEST-like, útiles para validación operacional y para mostrar la
+brecha de dominio. Cigarette/smoking no debe presentarse como clase robusta.
 """),
 code("""
 # Augmentación aplicada al dataset de conducta
@@ -172,34 +205,32 @@ plt.tight_layout(); plt.show()
 """),
 md("""
 **Lectura.** Las 5 variantes de augmentación (brillo, oscurecimiento, flip,
-ruido, zoom) cubren las condiciones de variación real: cambios de iluminación
-nocturna, reflejo de luces, ángulo de cámara. Cada frame original genera ~5
-variantes, multiplicando el dataset de ~60 a ~300 instancias por clase.
+ruido, zoom) cubren condiciones reales: iluminación nocturna, reflejos,
+compresión y cambios de escala. En el FDR no se debe afirmar que la
+augmentación resuelve cigarette; solo reduce sobreajuste y mejora robustez.
 """),
 code("""
 # Honestidad: declaración de fuga de datos
 print("=== DECLARACIÓN DE FUGA DE DATOS (Data Leakage) ===")
 print()
-print("Clase 'cigarette':")
-print("  - Train: ~18 frames, todos del clip tekno-01")
-print("  - Test : ~4 frames, también del clip tekno-01")
-print("  -> FUGA CONFIRMADA: train y test comparten la misma escena.")
-print("     F1=0.99 en test no refleja generalización real.")
+print("Modelo reportable principal:")
+print("  - phone/safe entrenado y evaluado con split train/valid/test.")
+print("  - Sus métricas se reportan como dominio de dataset público.")
 print()
-print("Clase 'phone_call':")
-print("  - Train: ~45 frames de tekno-02")
-print("  - Test : ~10 frames de tekno-02")
-print("  -> FUGA PARCIAL: misma escena, iluminación idéntica.")
+print("Modelo experimental phone/cigarette/safe:")
+print("  - Incluye cigarette, pero los ejemplos TEKNOFEST-like son pocos y de escena repetida.")
+print("  - Si train/test comparten el mismo clip, hay fuga de datos operacional.")
+print("  - Cualquier F1 alto de cigarette debe leerse como rendimiento en escena conocida.")
 print()
-print("Impacto: métricas en Sección 4 deben interpretarse como")
-print("'rendimiento en el clip conocido', NO como generalización a nuevas cámaras.")
-print("Solución real: footage diverso de múltiples cámaras/condiciones.")
+print("Impacto para Sección 4:")
+print("  - phone/safe: métrica reportable en dataset separado.")
+print("  - cigarette/smoking: prototipo/escena conocida; requiere más dominio.")
+print("Solución real: footage diverso, 1080p si es posible, y etiquetas manuales verificadas.")
 """),
 md("""
-**Lectura.** La declaración de fuga es honesta y obligatoria para el FDR.
-Las métricas altas en la sección de evaluación son coherentes con fuga
-(misma escena train/test), no con generalización real. Con footage 1080p
-diverso la fuga desaparece y las métricas caerían a un nivel más realista.
+**Lectura.** Esta declaración evita sobreprometer. El FDR debe decir que
+phone/safe tiene evidencia cuantitativa fuerte en su dominio, mientras que
+cigarette/smoking queda como objetivo de adaptación de dominio.
 """),
 ]
 
@@ -295,11 +326,12 @@ print(f"fast-plate-ocr: {fpo_text!r}   <- correcto (modelo entrenado en placas)"
 print(f"Tamaño ROI    : {pw}x{ph} px a 464p")
 """),
 md("""
-**Lectura.** EasyOCR confunde "34 TC 8532" con texto aleatorio porque es
-un OCR genérico no entrenado en placas. `fast-plate-ocr` (MobileViT,
-entrenado en placas reales) lee **"34TC8532" correctamente** en todos los
-frames donde el detector da ROI. El límite real es la baja resolución (30 px)
-que hace que el ROI sea pequeño — con 1080p QoD el mismo pipeline da la placa completa.
+**Lectura.** EasyOCR confunde "34 TC 8532" porque es un OCR genérico no
+entrenado en placas. `fast-plate-ocr` mejora claramente la lectura en el ROI
+válido mostrado, pero para el FDR se reporta como **OCR experimental**:
+necesita tabla de aciertos/fallos por frame y más videos antes de reclamar
+generalización. El límite sigue siendo la baja resolución del ROI (~30-40 px
+de alto) y las condiciones nocturnas.
 """),
 md("### Caso 3 — Conducción errática (tekno-03): señal de trayectoria"),
 code("""
@@ -341,15 +373,15 @@ El pipeline QuisMotion es un grafo de procesamiento donde **todo deriva del
 vehículo detectado**. No hay módulos independientes.
 
 ```
-Frame (WebSocket @10FPS)
+Frame (WebSocket / sampling target)
   └─ YOLOv8x (detección de vehículo)
        ├─ DeepSORT (tracking → track_id)
        ├─ plate_detector.pt → fast-plate-ocr (placa "34 TC 8532")
        ├─ cabin crop → YOLOv8x (ocupantes)
        ├─ cabin crop → behavior_model (SMOKING / PHONE)
-       ├─ bbox growth ratio → QoD trigger (480p→1080p)
+       ├─ bbox growth ratio → QoD trigger / higher-quality request
        ├─ bbox center history → swerving_score (tekno-03)
-       └─ DuckDB+VSS (embedding 512-d para búsqueda de similares)
+       └─ optional incident storage / similarity search
 ```
 """),
 code("""
@@ -377,24 +409,26 @@ def to_payload(fr):
 """),
 md("### Pipeline completo sobre los 3 clips — señales superpuestas"),
 code("""
-def run_clip(path, step=5, keep=3):
-    cap=cv2.VideoCapture(path); st=SessionState(session_id=os.path.basename(path))
-    idx=0; rows=[]
-    while True:
-        ok,fr=cap.read()
-        if not ok: break
-        if idx%step==0:
-            det=provider._process_sync(to_payload(fr), st)
-            area=det["detections"][0]["bbox_area_ratio"] if det["detections"] else 0
-            rich=(area
-                  + (0.3 if det["behavior"]["bbox"] else 0)
-                  + (0.1*len(det["occupants"]["boxes"]))
-                  + (0.2 if det["qod"]["state"]=="active" else 0))
-            rows.append((rich, fr.copy(), det))
-        idx+=1
+def run_clip(path, sample_seconds=(2.0, 4.0, 6.0)):
+    # FDR-friendly: fixed sparse sampling keeps the notebook reproducible and fast.
+    cap = cv2.VideoCapture(path)
+    st = SessionState(session_id=os.path.basename(path))
+    rows = []
+    for sec in sample_seconds:
+        cap.set(cv2.CAP_PROP_POS_MSEC, sec * 1000)
+        ok, fr = cap.read()
+        if not ok:
+            continue
+        det = provider._process_sync(to_payload(fr), st)
+        area = det["detections"][0]["bbox_area_ratio"] if det["detections"] else 0
+        rich = (area
+                + (0.3 if det["behavior"]["bbox"] else 0)
+                + (0.1*len(det["occupants"]["boxes"]))
+                + (0.2 if det["qod"]["state"]=="active" else 0))
+        rows.append((rich, fr.copy(), det))
     cap.release()
-    rows.sort(key=lambda r:-r[0])
-    return rows[:keep]
+    rows.sort(key=lambda r: -r[0])
+    return rows[:2]
 
 def draw_all(fr, det):
     im=cv2.cvtColor(fr, cv2.COLOR_BGR2RGB)
@@ -430,10 +464,10 @@ plt.tight_layout(); plt.show()
 md("""
 **Lectura.** Cada fila es un clip. Se observan todas las señales del pipeline:
 caja del vehículo + track ID (cian), ocupantes (verde), conducta (rojo) con
-etiqueta SMOKING/PHONE, ROI de placa (naranja) y HUD con
-QoD/riesgo/matrícula. La placa "34 TC 8532" aparece correcta gracias a
-`fast-plate-ocr`. **Todo nace de la detección del vehículo** — no hay módulos
-sueltos.
+etiqueta de conducta cuando hay señal, ROI de placa (naranja) y HUD con
+QoD/riesgo/matrícula. La lectura de placa se mantiene como módulo
+experimental: funciona en ROIs válidos, pero no se reclama robustez general.
+**Todo nace de la detección del vehículo** — no hay módulos sueltos.
 """),
 md("### QoD — calidad de servicio adaptativa"),
 code("""
@@ -446,14 +480,14 @@ reg = pd.DataFrame([
 ])
 display(reg)
 print()
-print("Regla QoD: area_ratio >= 0.15  →  estado='active'  →  solicitar 1080p al operador")
-print("A 1080p: mismo pipeline, placa completa legible, mejor detección de conducta.")
+print("Regla QoD: area_ratio >= 0.15  →  estado='active'  →  recomendar/solicitar mayor calidad")
+print("Nota: la integración real con operador 5G/1080p queda como etapa posterior; aquí se valida el trigger IA.")
 """),
 md("""
 **Lectura.** El área del bbox del vehículo crece al acercarse a la cámara.
-Cuando supera 0.15 el sistema activa QoD y solicita 1080p (PDR §3.2).
-En los 3 clips el área llega a 0.31–0.41 confirmando que QoD se activa
-en todos los escenarios de prueba.
+Cuando supera 0.15 el sistema activa el estado QoD dentro del pipeline. En
+los 3 clips el área llega a 0.31–0.41, así que el trigger IA se valida. La
+negociación real con operador/red queda fuera del alcance de esta fase.
 """),
 ]
 
@@ -463,7 +497,7 @@ NB04 = [
 md("""
 # 04 · Entrenamiento del Modelo de Conducta  *(FDR Sección 3.3)*
 
-Se entrena un clasificador YOLOv8s-cls con 3 clases:
+Se entrena un detector YOLOv8s fine-tuned con 3 clases:
 `phone_call`, `smoking`, `normal`.
 El dataset se construye con cabin crops de los 3 clips + augmentación.
 """),
@@ -503,7 +537,7 @@ if os.path.exists(results_csv):
     if rec_col:
         axes[1].plot(epoch, df[rec_col]*100,  label="Recall", color="#F5A623")
     axes[1].set_title("mAP / Precision / Recall (val)"); axes[1].set_xlabel("época"); axes[1].set_ylabel("%"); axes[1].legend()
-    plt.suptitle("Entrenamiento YOLOv8 — modelo de conducta (phone_call / smoking)", fontsize=10)
+    plt.suptitle("Entrenamiento YOLOv8 — detector de conducta (phone_call / smoking)", fontsize=10)
     plt.tight_layout(); plt.show()
     if map_col: print(f"mAP@0.5 final: {df[map_col].iloc[-1]*100:.1f}%")
     if prec_col: print(f"Precision final: {df[prec_col].iloc[-1]*100:.1f}%")
@@ -576,7 +610,7 @@ else:
     print("(Nota: métricas reflejan fuga de datos — ver NB01)")
 """),
 md("""
-**Lectura.** La matriz de confusión muestra el comportamiento del clasificador
+**Lectura.** La matriz de confusión muestra el comportamiento del modelo
 en los 3 clips. Los errores más comunes son entre `smoking` y `normal` cuando
 el conductor no está en el momento exacto de fumar. El accuracy total refleja
 la fuga de datos declarada — no es generalización real.
@@ -591,7 +625,7 @@ md("""
 
 Esta sección presenta las métricas cuantitativas del sistema completo:
 Precisión, Recall, F1, mAP y FPS — tanto del detector de vehículos
-como del clasificador de conducta.
+como del modelo de conducta.
 """),
 code("""
 %matplotlib inline
@@ -600,7 +634,7 @@ import matplotlib.pyplot as plt, os, time, cv2, torch, sys
 from ultralytics import YOLO
 DEV = "cuda:0" if torch.cuda.is_available() else "cpu"
 """),
-md("### 1 · Métricas del detector de vehículos (YOLOv8x)"),
+md("### 1 · Métricas del detector de vehículos (familia YOLOv8)"),
 code("""
 # Métricas del detector base (COCO val2017 — clase car/truck/bus/motorcycle)
 # Fuente: Ultralytics YOLOv8x official benchmarks
@@ -609,53 +643,52 @@ metrics_det = pd.DataFrame([
     {"Modelo":"YOLOv8s (COCO)","mAP@0.5":0.449,"mAP@0.5:0.95":0.387,"Params(M)":11.2,"FLOPs(G)":28.6},
 ])
 display(metrics_det)
-print("YOLOv8x usado en producción (RTX 4060); YOLOv8s como referencia CPU.")
+print("YOLOv8x/YOLOv8s se reportan como referencia de capacidad; el test automático de clips usa yolov8n para smoke-test ligero.")
 """),
-md("### 2 · Métricas del clasificador de conducta (fine-tuned YOLOv8s-cls)"),
+md("### 2 · Métricas de conducta: modelo reportable vs modelo experimental"),
 code("""
-model_path = "../backend/runs/behavior_combined/weights/best.pt"
-results_csv = "../backend/runs/behavior_combined/results.csv"
-if os.path.exists(results_csv):
-    df = pd.read_csv(results_csv); df.columns = df.columns.str.strip()
-    acc_cols = [c for c in df.columns if "accuracy" in c.lower() or "top1" in c.lower()]
-    final_row = df.iloc[-1]
-    print("Métricas finales del modelo de conducta:")
-    for col in acc_cols:
-        val = final_row[col]
-        print(f"  {col}: {val*100:.1f}%" if val<=1 else f"  {col}: {val:.1f}%")
-else:
-    print("results.csv no encontrado.")
+import json
 
-# Tabla de P/R/F1 por clase (calculada en la evaluación del modelo combinado)
-classes_metrics = pd.DataFrame([
-    {"Clase":"phone_call","Precision":0.91,"Recall":0.88,"F1":0.89,"Instancias_test":10},
-    {"Clase":"smoking",   "Precision":0.85,"Recall":0.80,"F1":0.82,"Instancias_test":4},
-    {"Clase":"normal",    "Precision":0.94,"Recall":0.96,"F1":0.95,"Instancias_test":15},
+summary_path = "../backend/runs/focused_test/eval_summary.json"
+if os.path.exists(summary_path):
+    summary = json.load(open(summary_path, "r", encoding="utf-8"))
+    focused_overall = pd.DataFrame([summary["overall"]])
+    focused_per_class = pd.DataFrame(summary["per_class"])
+    display(focused_overall)
+    display(focused_per_class)
+    print("Modelo reportable: phone/safe en dataset separado.")
+else:
+    print("No se encontró eval_summary.json del modelo focused phone/safe.")
+
+experimental_metrics = pd.DataFrame([
+    {"Clase":"phone_call","Precision":0.91,"Recall":0.88,"F1":0.89,"Instancias_test":10,"Estatus":"escena conocida"},
+    {"Clase":"smoking",   "Precision":0.85,"Recall":0.80,"F1":0.82,"Instancias_test":4, "Estatus":"experimental / data-limited"},
+    {"Clase":"normal",    "Precision":0.94,"Recall":0.96,"F1":0.95,"Instancias_test":15,"Estatus":"escena conocida"},
 ])
-display(classes_metrics)
+display(experimental_metrics)
 print()
-print("AVISO: métricas calculadas sobre el mismo clip del entrenamiento (fuga de datos).")
-print("Interpretar como 'rendimiento en escena conocida', no generalización.")
+print("AVISO: la tabla experimental phone_call/smoking/normal se interpreta como rendimiento en escena conocida.")
+print("No se usa para afirmar generalización de cigarette/smoking.")
 """),
 code("""
-# Gráfica de barras P/R/F1 por clase
-fig, ax = plt.subplots(figsize=(9, 4))
-x = np.arange(3); w = 0.25
-classes = ["phone_call", "smoking", "normal"]
-P = [0.91, 0.85, 0.94]; R = [0.88, 0.80, 0.96]; F1 = [0.89, 0.82, 0.95]
-ax.bar(x-w, P,  w, label="Precision", color="#4C8BF5")
-ax.bar(x,   R,  w, label="Recall",    color="#F5A623")
-ax.bar(x+w, F1, w, label="F1",        color="#34A853")
-ax.set_xticks(x); ax.set_xticklabels(classes); ax.set_ylim(0, 1.1)
-ax.set_ylabel("Score"); ax.legend(); ax.set_title("Precision / Recall / F1 por clase (behavior model)")
-for bars in ax.containers: ax.bar_label(bars, fmt="%.2f", fontsize=8)
-plt.tight_layout(); plt.show()
+# Gráfica reportable: phone/safe focused model
+if os.path.exists(summary_path):
+    pc = focused_per_class.copy()
+    fig, ax = plt.subplots(figsize=(8, 4))
+    x = np.arange(len(pc)); w = 0.25
+    ax.bar(x-w, pc["P"],  w, label="Precision", color="#4C8BF5")
+    ax.bar(x,   pc["R"],  w, label="Recall",    color="#F5A623")
+    ax.bar(x+w, pc["F1"], w, label="F1",        color="#34A853")
+    ax.set_xticks(x); ax.set_xticklabels(pc["class"]); ax.set_ylim(0, 1.08)
+    ax.set_ylabel("Score"); ax.legend(); ax.set_title("Modelo reportable phone/safe — Precision / Recall / F1")
+    for bars in ax.containers: ax.bar_label(bars, fmt="%.3f", fontsize=8)
+    plt.tight_layout(); plt.show()
 """),
 md("""
-**Lectura.** La clase `normal` tiene el mejor F1 (0.95) por ser la mayoritaria.
-`phone_call` (F1=0.89) y `smoking` (F1=0.82) son más difíciles — el cigarro
-es pequeño y el teléfono a veces se confunde con la mano. Las métricas altas
-confirman la **fuga de datos** (mismo clip en train y test).
+**Lectura.** La tabla phone/safe es la métrica fuerte y reportable del FDR:
+usa un test set separado del dataset preparado. La tabla phone_call/smoking/
+normal sirve para demostrar el prototipo en escena conocida, pero cigarette
+no debe declararse robusto por tener pocas instancias y dominio repetido.
 """),
 md("### 3 · FPS y latencia del pipeline completo"),
 code("""
@@ -671,7 +704,7 @@ def to_payload(fr):
 cap = cv2.VideoCapture("../frontend/public/demo-videos/tekno-01.mp4")
 st  = SessionState(session_id="fps_test")
 times = []
-for _ in range(30):
+for _ in range(12):
     ok,fr=cap.read()
     if not ok: break
     t0=time.perf_counter()
@@ -684,6 +717,7 @@ fps_results = pd.DataFrame([{
     "Latencia media (ms)": round(times.mean()*1000,1),
     "Latencia p95 (ms)":   round(np.percentile(times,95)*1000,1),
     "FPS real":            round(1/times.mean(),1),
+    "Objetivo 10 FPS":      "CUMPLE" if (1/times.mean()) >= 10 else "NO CUMPLE todavía",
 }])
 display(fps_results)
 """),
@@ -694,21 +728,25 @@ ax.axhline(1000/10, color="red", ls="--", lw=1.2, label="objetivo 10 FPS (100ms)
 ax.set_xlabel("Frame"); ax.set_ylabel("Latencia (ms)")
 ax.set_title(f"Latencia por frame — pipeline completo ({DEV})")
 ax.legend(); plt.tight_layout(); plt.show()
-print(f"FPS promedio: {1/times.mean():.1f}  |  objetivo: ≥ 10 FPS")
+fps_measured = 1/times.mean()
+print(f"FPS promedio pipeline completo: {fps_measured:.1f}  |  objetivo: ≥ 10 FPS")
+print("Estado:", "CUMPLE" if fps_measured >= 10 else "NO CUMPLE todavía — requiere optimización o muestreo asíncrono.")
 """),
 md("""
-**Lectura.** La latencia promedio determina si el sistema alcanza el objetivo
-de 10 FPS del PDR. En GPU (RTX 4060) el pipeline completo corre por debajo
-de 100ms/frame, cumpliendo el objetivo. Los picos de latencia corresponden
-a frames donde se activa el detector de placa y/o el comportamiento.
+**Lectura.** Esta es la medición honesta del pipeline completo local
+(detección + tracking + OCR + conducta). En la corrida guardada el entorno cae
+a CPU/ONNX fallback y no alcanza 10 FPS. Por eso el FDR debe reportar dos
+niveles: el modelo focalizado tiene benchmark guardado de 26.1 FPS a 512px,
+pero el pipeline completo integrado necesita GPU correctamente configurada,
+optimización, asincronía o muestreo selectivo para llegar a 10 FPS sostenidos.
 """),
 md("### 4 · Evidencia de detección correcta a nivel de video — test de regresión"),
 code("""
 os.chdir("..")
 import glob as _glob
 reg = pd.DataFrame([
-    {"clip":"tekno-01","detecciones":5,"conf_max":0.944,"area_inicio":0.125,"area_pico":0.406,"placa_votada":"34 TC 8532","conducta":"SMOKING"},
-    {"clip":"tekno-02","detecciones":5,"conf_max":0.951,"area_inicio":0.120,"area_pico":0.410,"placa_votada":"34 TC 8532","conducta":"PHONE"},
+    {"clip":"tekno-01","detecciones":5,"conf_max":0.944,"area_inicio":0.125,"area_pico":0.406,"placa_votada":"34 TC 8532","conducta":"SMOKING experimental"},
+    {"clip":"tekno-02","detecciones":5,"conf_max":0.951,"area_inicio":0.120,"area_pico":0.410,"placa_votada":"34 TC 8532","conducta":"PHONE experimental"},
     {"clip":"tekno-03","detecciones":5,"conf_max":0.925,"area_inicio":0.019,"area_pico":0.307,"placa_votada":"—","conducta":"RECKLESS"},
 ])
 display(reg)
@@ -716,18 +754,18 @@ print()
 print("Conclusión: los 3 clips PASAN el test de regresión.")
 print("  - conf ≥ 0.92 en los 3 → detector estable")
 print("  - area crece → QoD se activa en todos")
-print("  - placa '34 TC 8532' correcta en tekno-01 y tekno-02 (fast-plate-ocr)")
-print("  - tekno-03: conducta reckless por trayectoria (sin conducta de cabina)")
+print("  - placa '34 TC 8532' leída en muestras válidas de tekno-01 y tekno-02 (OCR experimental)")
+print("  - tekno-03: riesgo reckless por trayectoria (sin conducta de cabina)")
 """),
 md("""
-**Conclusión general (Sección 4).** El sistema cumple los requisitos cuantitativos
-del PDR en el entorno de prueba:
-- **Detección de vehículo:** conf ≥ 0.92, mAP@0.5 = 0.634 (YOLOv8x COCO)
-- **Placa:** "34 TC 8532" correcta con `fast-plate-ocr` en todos los frames con ROI válido
-- **Conducta:** F1 ≥ 0.82 en escena conocida (fuga declarada)
-- **FPS:** ≥ 10 en GPU, cumple objetivo PDR
-- **QoD:** se activa en los 3 clips (área ≥ 0.15)
-- **Límites honestos:** métricas de conducta no generalizan (fuga); placa requiere 1080p para generalizar
+**Conclusión general (Sección 4).** El sistema es defendible si se reporta con
+alcance claro:
+- **Detección de vehículo:** conf ≥ 0.92 en los 3 clips; mAP@0.5 COCO de referencia.
+- **Proximidad/QoD trigger:** el área del bbox crece y supera 0.15 en los 3 clips.
+- **Conducta reportable:** phone/safe tiene métricas fuertes en test set separado.
+- **Conducta experimental:** smoking/cigarette funciona como prototipo de escena conocida, no como generalización.
+- **Placa/OCR:** `fast-plate-ocr` mejora el ROI válido, pero OCR queda experimental hasta tener tabla frame-a-frame y más videos.
+- **FPS:** el modelo focalizado tiene benchmark guardado de 26.1 FPS; el pipeline completo medido en esta corrida CPU/ONNX fallback no alcanza 10 FPS todavía y requiere GPU/optimización.
 """),
 ]
 
@@ -749,7 +787,7 @@ def build_one(name, cells):
     print(f"executing {name} ...", flush=True)
     NotebookClient(nb, timeout=900, kernel_name="quismotion",
                    resources={"metadata": {"path": HERE}},
-                   allow_errors=True).execute()
+                   allow_errors=False).execute()
     with open(os.path.join(HERE, name), "w", encoding="utf-8") as fh:
         nbf.write(nb, fh)
     errors = [(o.get("ename"), str(o.get("evalue",""))[:80])

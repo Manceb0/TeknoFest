@@ -37,6 +37,7 @@ Claim recomendado:
 | Modelo phone/safe | Fuerte en su dominio | Precision, recall, F1 y mAP son altos en test set del dominio público. |
 | Roboflow | Soportado/modular | Útil para dataset, versionado, hosted inference y posible mejora de etiquetas. |
 | Notebooks FDR | Listos como base | Están consolidados en `00` a `05`, alineados con las secciones del reporte. |
+| FPS modelo focalizado | Bueno como benchmark guardado | 26.1 FPS a 512px para el modelo phone/safe, no para todo el pipeline integrado. |
 
 ## 3. Qué NO debemos sobreprometer
 
@@ -47,6 +48,7 @@ Claim recomendado:
 | Velocidad real en km/h | No validada con ground truth | Reportar solo proxy de proximidad: área del bbox, no velocidad física exacta. |
 | F1=1.00 | Válido solo para phone/safe en dataset público | No usarlo como métrica de todos los videos reales ni de cigarette. |
 | NVIDIA/DeepStream | Futuro despliegue | No meterlo como núcleo de la solución actual salvo como optimización futura. |
+| FPS full pipeline | No cerrado todavía | La corrida integrada actual cae a CPU/ONNX fallback y no alcanza 10 FPS; requiere CUDA/optimización/asincronía. |
 
 Frase segura para el reporte:
 
@@ -228,4 +230,3 @@ Prioridad baja:
 Veredicto:
 
 > El proyecto es viable para TEKNOFEST si se presenta como pipeline funcional con evidencia y limitaciones claras. No conviene prometer detección robusta de cigarrillo ni OCR perfecto. La fortaleza está en detección de vehículo/proximidad, arquitectura modular, dataset preparado, modelo phone/safe y notebooks de evaluación.
-

@@ -15,7 +15,8 @@ These notebooks are the clean evidence package for the TEKNOFEST FDR AI/video-la
 
 - Real-video vehicle detector: max confidence 0.926-0.951 across the three supplied videos.
 - Focused phone/safe model: Precision 0.999, Recall 1.000, F1 1.000, mAP@50 0.995, mAP@50-95 0.858.
-- Inference speed for focused behavior model: 26.1 FPS at 512px on GPU.
+- Inference speed for focused behavior model: saved benchmark of 26.1 FPS at 512px.
+- Integrated pipeline speed in the current local run: CPU/ONNX fallback; not yet 10 FPS.
 
 ## Important limitation
 
