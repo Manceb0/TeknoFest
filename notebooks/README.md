@@ -1,17 +1,15 @@
 # QuisMotion notebook reports
 
-Use these notebooks as the evidence base for the FDR AI/video-labelling report.
+These notebooks are the clean evidence package for the TEKNOFEST FDR AI/video-labelling report.
 
 ## Recommended reading order
 
-1. `00_environment_and_gpu.ipynb` - runtime, packages, GPU/CPU context.
-2. `06_dataset_preparation.ipynb` - dataset sources, split, balancing, augmentation.
-3. `01_vehicle_detection_qod_and_latency.ipynb` - vehicle detection, proximity signal, FPS.
-4. `02_license_plate_resolution_limit.ipynb` - why OCR is limited by 464p footage.
-5. `03_driver_behavior_and_occupants.ipynb` - behavior feasibility and domain mismatch.
-6. `05_behavior_training_curves.ipynb` - training/validation curves.
-7. `07_solution_testing.ipynb` - formal metrics and “why we trust it”.
-8. `08_operational_analysis.ipynb` - what happens on the three supplied clips.
+1. `00_environment_setup.ipynb` - runtime, packages, GPU/CPU context.
+2. `01_dataset_preparation.ipynb` - dataset sources, split, balancing and augmentation.
+3. `02_problem_analysis.ipynb` - low light, motion blur, occlusion, 464p plate limits and domain shift.
+4. `03_ai_architecture.ipynb` - raw video to labelled output pipeline.
+5. `04_model_training.ipynb` - YOLO training setup, curves and technical decisions.
+6. `05_solution_testing.ipynb` - precision, recall, F1, mAP, FPS and "why we trust it".
 
 ## Main numbers to cite
 
@@ -21,6 +19,12 @@ Use these notebooks as the evidence base for the FDR AI/video-labelling report.
 
 ## Important limitation
 
-Do not claim robust cigarette/smoking detection yet. The cigarette label is weak because the available frames are low-resolution, side-angle, and few. Treat cigarette detection as a domain-adaptation target that requires more labelled competition-like frames.
+Do not claim robust cigarette/smoking detection yet. The cigarette label is weak because the available frames are low-resolution, side-angle and few.
 
-For the full section-by-section writing guide, see `docs/FDR_NOTEBOOK_GUIDE.md`.
+Do not claim reliable exact plate OCR from the 464p clips. Treat OCR as experimental unless higher-resolution frames or a plate-specific dataset are added.
+
+## Archived notebooks
+
+Older exploratory notebooks are kept locally in `notebooks/_archive/` for reference, but the FDR should use the consolidated `00` to `05` notebooks above.
+
+For the full section-by-section writing guide, see `docs/FDR_NOTEBOOK_GUIDE.md` and `docs/TEKNOFEST_FDR_PLAN.md`.

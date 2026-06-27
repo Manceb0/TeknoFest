@@ -5,6 +5,7 @@ desktop.ini
 
 # Runtime / local
 tmp/
+notebooks/_archive/
 .server.pid
 *.log
 backend/.server.pid
