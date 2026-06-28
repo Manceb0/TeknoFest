@@ -60,6 +60,10 @@ Abrir con el kernel **"QuisMotion (.venv)"**.
 | 04 | `model_training` | **Sec. 3.3** | curvas pérdida + mAP/P/R; matriz de confusión | modelo converge; mAP@0.5 ~93% (fuga declarada) |
 | 05 | `solution_testing` | **Sec. 4** (20 pts) | P/R/F1, latencia FPS y test de regresión 3 clips | phone/safe fuerte; full pipeline CPU/ONNX fallback no llega a 10 FPS todavía |
 
+> Para revisión visual tipo reporte, usar `reports/notebooks_html_no_code/index.html`.
+> GitHub muestra el código de los `.ipynb` por diseño; los HTML `no_code` ocultan
+> las celdas de código y dejan solo narrativa, tablas y figuras.
+
 > **Honestidad sobre métricas.** Phone/safe es el claim reportable fuerte en
 > dataset separado. Smoking/cigarette y OCR de placa son prototipo/escena
 > conocida; requieren footage diverso y más etiquetas para generalizar.

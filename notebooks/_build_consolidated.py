@@ -683,15 +683,38 @@ print("YOLOv8x/YOLOv8s se reportan como referencia de capacidad; el test automá
 md("### 2 · Métricas de conducta: modelo reportable vs modelo experimental"),
 code("""
 import json
+from pathlib import Path
+
+def yolo_split_counts(label_dir, names):
+    counts = {name: 0 for name in names}
+    label_dir = Path(label_dir)
+    for label_file in label_dir.glob("*.txt"):
+        for line in label_file.read_text(errors="ignore").splitlines():
+            parts = line.split()
+            if not parts:
+                continue
+            class_id = int(float(parts[0]))
+            if 0 <= class_id < len(names):
+                counts[names[class_id]] += 1
+    return counts
 
 summary_path = "../backend/runs/focused_test/eval_summary.json"
+focused_test_counts = yolo_split_counts("../tmp/behavior_ds/test/labels", ["phone", "safe"])
 if os.path.exists(summary_path):
     summary = json.load(open(summary_path, "r", encoding="utf-8"))
     focused_overall = pd.DataFrame([summary["overall"]])
     focused_per_class = pd.DataFrame(summary["per_class"])
+    focused_per_class["test_instances"] = focused_per_class["class"].map(focused_test_counts).fillna(0).astype(int)
+    evidence_context = pd.DataFrame([
+        {"Fuente":"tmp/behavior_ds/test", "Dominio":"dataset público / cabina clara",
+         "Clases":"phone vs safe", "Imágenes_test":sum(focused_test_counts.values()),
+         "phone_test":focused_test_counts.get("phone", 0), "safe_test":focused_test_counts.get("safe", 0),
+         "Uso_correcto":"métrica reportable solo para phone/safe en ese dominio"}
+    ])
+    display(evidence_context)
     display(focused_overall)
     display(focused_per_class)
-    print("Modelo reportable: phone/safe en dataset separado.")
+    print("Modelo reportable: phone/safe en dataset público separado; NO mide smoking, OCR ni videos TEKNOFEST nocturnos.")
 else:
     print("No se encontró eval_summary.json del modelo focused phone/safe.")
 
@@ -705,6 +728,14 @@ print()
 print("AVISO: la tabla experimental phone_call/smoking/normal se interpreta como rendimiento en escena conocida.")
 print("No se usa para afirmar generalización de cigarette/smoking.")
 """),
+md("""
+> **Cómo leer el gráfico siguiente.** Las barras altas son válidas para el
+> experimento binario `phone/safe` sobre el test set público preparado
+> (`tmp/behavior_ds/test`: 478 imágenes; 300 phone, 178 safe). No son una métrica
+> del pipeline completo sobre los videos TEKNOFEST, no incluyen fumar/cigarrillo,
+> no miden OCR de placa y no deben presentarse como rendimiento general del
+> sistema.
+"""),
 code("""
 # Gráfica reportable: phone/safe focused model
 if os.path.exists(summary_path):
@@ -714,16 +745,22 @@ if os.path.exists(summary_path):
     ax.bar(x-w, pc["P"],  w, label="Precision", color="#4C8BF5")
     ax.bar(x,   pc["R"],  w, label="Recall",    color="#F5A623")
     ax.bar(x+w, pc["F1"], w, label="F1",        color="#34A853")
-    ax.set_xticks(x); ax.set_xticklabels(pc["class"]); ax.set_ylim(0, 1.08)
-    ax.set_ylabel("Score"); ax.legend(); ax.set_title("Modelo reportable phone/safe — Precision / Recall / F1")
+    labels = [f"{row['class']}\\n(n={int(row['test_instances'])})" for _, row in pc.iterrows()]
+    ax.set_xticks(x); ax.set_xticklabels(labels); ax.set_ylim(0, 1.08)
+    ax.set_ylabel("Score"); ax.legend(loc="lower left")
+    ax.set_title("Modelo focalizado phone/safe — test público separado (n=478)")
+    ax.text(0.5, -0.22, "No incluye smoking/cigarette, OCR ni rendimiento del pipeline completo en videos TEKNOFEST.",
+            transform=ax.transAxes, ha="center", va="top", fontsize=9, color="#555")
     for bars in ax.containers: ax.bar_label(bars, fmt="%.3f", fontsize=8)
     plt.tight_layout(); plt.show()
 """),
 md("""
-**Lectura.** La tabla phone/safe es la métrica fuerte y reportable del FDR:
-usa un test set separado del dataset preparado. La tabla phone_call/smoking/
-normal sirve para demostrar el prototipo en escena conocida, pero cigarette
-no debe declararse robusto por tener pocas instancias y dominio repetido.
+**Lectura.** La tabla phone/safe es la métrica fuerte y reportable del FDR porque
+usa un test set separado del dataset preparado. Aun así, su alcance es estrecho:
+clasifica `phone` vs `safe` en el dominio del dataset público. La tabla
+phone_call/smoking/normal sirve solo para demostrar el prototipo en escena
+conocida; cigarette/smoking no debe declararse robusto por tener pocas instancias
+y dominio repetido.
 """),
 md("### 3 · FPS y latencia del pipeline completo"),
 code("""

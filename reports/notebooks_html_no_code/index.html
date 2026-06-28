@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>QuisMotion TEKNOFEST FDR reports — no code</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0d0d12;--panel:#151720;--ink:#f2f4ff;--muted:#a6abc4;--line:#2a2e3d;--accent:#69d8ff;--warn:#ffbf54}
+    body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Segoe UI",system-ui,sans-serif;padding:32px}
+    main{max-width:980px;margin:auto}.top{border-bottom:1px solid var(--line);margin-bottom:28px;padding-bottom:16px}
+    h1{font-size:34px;line-height:1.2;margin:.35rem 0}a{color:var(--accent);font-weight:650;text-decoration:none}
+    a:hover{text-decoration:underline}.badge{display:inline-block;color:#081018;background:var(--accent);border-radius:999px;padding:3px 10px;font-weight:800;font-size:12px}
+    .meta{color:var(--muted)}li{margin:10px 0}.note{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-top:24px}
+  </style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <span class="badge">QuisMotion</span>
+    <h1>TEKNOFEST FDR reports — clean view without code</h1>
+    <p class="meta">Use these HTML exports for review/submission reading. The executable notebooks remain in <code>notebooks/</code>, but these files hide code cells so the analysis reads like a report.</p>
+  </div>
+  <ol>
+    <li><a href="00_environment_setup.html">00_environment_setup</a> — environment and reproducibility.</li>
+    <li><a href="01_dataset_preparation.html">01_dataset_preparation</a> — dataset sources, splits, balancing and augmentation.</li>
+    <li><a href="02_problem_analysis.html">02_problem_analysis</a> — low light, OCR limits, behavior visibility and trajectory risk.</li>
+    <li><a href="03_ai_architecture.html">03_ai_architecture</a> — video-to-label pipeline architecture.</li>
+    <li><a href="04_model_training.html">04_model_training</a> — YOLO behavior training curves and limitations.</li>
+    <li><a href="05_solution_testing.html">05_solution_testing</a> — metrics, FPS, regression evidence and trust argument.</li>
+  </ol>
+  <div class="note">
+    <strong>Scope note:</strong> vehicle/proximity and phone/safe are the strongest reportable claims. Smoking/cigarette and plate OCR are experimental/domain-adaptation targets, not fully solved labels.
+  </div>
+</main>
+</body>
+</html>

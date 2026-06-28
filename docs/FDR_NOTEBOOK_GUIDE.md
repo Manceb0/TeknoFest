@@ -4,6 +4,10 @@ This guide maps the current consolidated notebooks to the TEKNOFEST Final Design
 
 For the full Spanish delivery plan and the exact positioning we discussed, see `docs/TEKNOFEST_FDR_PLAN.md`.
 
+For clean visual review, open `reports/notebooks_html_no_code/index.html`. GitHub
+renders `.ipynb` files with code cells visible; the `notebooks_html_no_code`
+exports hide code inputs and are better for reading/submission review.
+
 ## Executive status
 
 The current evidence supports this claim:
