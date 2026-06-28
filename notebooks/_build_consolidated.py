@@ -729,38 +729,68 @@ print("AVISO: la tabla experimental phone_call/smoking/normal se interpreta como
 print("No se usa para afirmar generalización de cigarette/smoking.")
 """),
 md("""
-> **Cómo leer el gráfico siguiente.** Las barras altas son válidas para el
-> experimento binario `phone/safe` sobre el test set público preparado
-> (`tmp/behavior_ds/test`: 478 imágenes; 300 phone, 178 safe). No son una métrica
-> del pipeline completo sobre los videos TEKNOFEST, no incluyen fumar/cigarrillo,
-> no miden OCR de placa y no deben presentarse como rendimiento general del
-> sistema.
+> **Cómo leer el gráfico siguiente.** No se usa una gráfica per-class de barras
+> perfectas porque visualmente sobrepromete. En su lugar se muestran métricas
+> globales del modelo focalizado (`phone/safe`), incluyendo `mAP50-95=0.858`, y el
+> soporte real del test set (`tmp/behavior_ds/test`: 478 imágenes; 300 phone, 178
+> safe). Esto no es una métrica del pipeline completo sobre videos TEKNOFEST, no
+> incluye fumar/cigarrillo y no mide OCR de placa.
 """),
 code("""
-# Gráfica reportable: phone/safe focused model
+# Gráfica reportable sin sobreprometer: métricas globales + soporte del test
 if os.path.exists(summary_path):
-    pc = focused_per_class.copy()
-    fig, ax = plt.subplots(figsize=(8, 4))
-    x = np.arange(len(pc)); w = 0.25
-    ax.bar(x-w, pc["P"],  w, label="Precision", color="#4C8BF5")
-    ax.bar(x,   pc["R"],  w, label="Recall",    color="#F5A623")
-    ax.bar(x+w, pc["F1"], w, label="F1",        color="#34A853")
-    labels = [f"{row['class']}\\n(n={int(row['test_instances'])})" for _, row in pc.iterrows()]
-    ax.set_xticks(x); ax.set_xticklabels(labels); ax.set_ylim(0, 1.08)
-    ax.set_ylabel("Score"); ax.legend(loc="lower left")
-    ax.set_title("Modelo focalizado phone/safe — test público separado (n=478)")
-    ax.text(0.5, -0.22, "No incluye smoking/cigarette, OCR ni rendimiento del pipeline completo en videos TEKNOFEST.",
-            transform=ax.transAxes, ha="center", va="top", fontsize=9, color="#555")
-    for bars in ax.containers: ax.bar_label(bars, fmt="%.3f", fontsize=8)
+    overall = summary["overall"]
+    score_df = pd.DataFrame([
+        {"Métrica":"Precision", "Score":overall["precision"]},
+        {"Métrica":"Recall", "Score":overall["recall"]},
+        {"Métrica":"F1", "Score":overall["F1"]},
+        {"Métrica":"mAP@50", "Score":overall["mAP50"]},
+        {"Métrica":"mAP@50-95", "Score":overall["mAP50_95"]},
+    ])
+    support_df = pd.DataFrame([
+        {"Clase":"phone", "Instancias":focused_test_counts.get("phone", 0)},
+        {"Clase":"safe", "Instancias":focused_test_counts.get("safe", 0)},
+    ])
+
+    fig, axes = plt.subplots(
+        1, 2, figsize=(11, 4.2), gridspec_kw={"width_ratios":[1.65, 1]}
+    )
+    colors = ["#4C8BF5", "#F5A623", "#34A853", "#7E57C2", "#EA4335"]
+    axes[0].bar(score_df["Métrica"], score_df["Score"], color=colors)
+    axes[0].set_ylim(0, 1.05)
+    axes[0].set_ylabel("Score")
+    axes[0].set_title("Modelo focalizado phone/safe — métricas globales")
+    axes[0].grid(axis="y", alpha=.25)
+    axes[0].tick_params(axis="x", rotation=20)
+    for i, row in score_df.iterrows():
+        axes[0].text(i, row["Score"] + 0.018, f"{row['Score']:.3f}",
+                     ha="center", va="bottom", fontsize=9)
+
+    axes[1].bar(support_df["Clase"], support_df["Instancias"], color=["#4C8BF5", "#34A853"])
+    axes[1].set_title("Soporte test set público\\n(n=478 imágenes)")
+    axes[1].set_ylabel("Instancias")
+    axes[1].grid(axis="y", alpha=.25)
+    for i, row in support_df.iterrows():
+        axes[1].text(i, row["Instancias"] + 8, str(int(row["Instancias"])),
+                     ha="center", va="bottom", fontsize=9)
+
+    fig.suptitle("Evidencia reportable acotada: phone/safe, no pipeline completo", y=1.03)
+    fig.text(
+        0.5, -0.04,
+        "Caveat: no incluye smoking/cigarette, OCR ni rendimiento en videos TEKNOFEST nocturnos. "
+        "mAP@50-95 muestra la exigencia de localización fina.",
+        ha="center", va="top", fontsize=9, color="#555"
+    )
     plt.tight_layout(); plt.show()
 """),
 md("""
 **Lectura.** La tabla phone/safe es la métrica fuerte y reportable del FDR porque
 usa un test set separado del dataset preparado. Aun así, su alcance es estrecho:
-clasifica `phone` vs `safe` en el dominio del dataset público. La tabla
-phone_call/smoking/normal sirve solo para demostrar el prototipo en escena
-conocida; cigarette/smoking no debe declararse robusto por tener pocas instancias
-y dominio repetido.
+clasifica `phone` vs `safe` en el dominio del dataset público. La gráfica evita
+celebrar valores 1.000 por clase y muestra también `mAP50-95`, que es más estricta
+y queda en 0.858. La tabla phone_call/smoking/normal sirve solo para demostrar el
+prototipo en escena conocida; cigarette/smoking no debe declararse robusto por
+tener pocas instancias y dominio repetido.
 """),
 md("### 3 · FPS y latencia del pipeline completo"),
 code("""
